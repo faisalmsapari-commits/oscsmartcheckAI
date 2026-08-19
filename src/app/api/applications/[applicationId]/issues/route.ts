@@ -27,16 +27,21 @@ export async function GET(
     }
 
     try {
-      const issues = await getApplicationIssues(applicationId, userRole);
-      if (issues && issues.length > 0) {
-        return NextResponse.json({ issues });
+      if (isCloudFirestoreConfigured()) {
+        const issues = await getApplicationIssues(applicationId, userRole);
+        if (issues && issues.length > 0) {
+          return NextResponse.json({ issues });
+        }
       }
     } catch {
       // Fallback
     }
+
+    const demoIssues = getDemoIssuesForApp(applicationId);
+    return NextResponse.json({ issues: demoIssues });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Ralat memuatkan isu";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message, issues: [] }, { status: 200 });
   }
 }
 

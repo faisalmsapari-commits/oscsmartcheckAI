@@ -144,17 +144,10 @@ export function getAdminStorage(): Storage {
 export async function safeVerifyIdToken(
   token: string
 ): Promise<{ uid: string; email?: string; role?: string; [key: string]: unknown }> {
-  if (!token) {
-    return {
-      uid: "demo-applicant-uid",
-      email: "pemohon@perunding.com",
-      role: "APPLICANT",
-      organizationId: "MPLBP",
-    };
-  }
-
-  if (token.startsWith("mock-token-for-") || token.startsWith("mock-")) {
-    const rolePart = token.replace("mock-token-for-", "").replace("mock-", "").toUpperCase() || "APPLICANT";
+  if (!token || !isCloudFirestoreConfigured() || token.startsWith("mock-") || token.startsWith("demo-") || !token.includes(".")) {
+    const rolePart = (token && token.startsWith("mock-token-for-"))
+      ? token.replace("mock-token-for-", "").toUpperCase()
+      : "APPLICANT";
     return {
       uid: `demo-${rolePart.toLowerCase()}-uid`,
       email: `${rolePart.toLowerCase()}@mplbp.gov.my`,
@@ -167,7 +160,6 @@ export async function safeVerifyIdToken(
     const auth = getAdminAuth();
     return await auth.verifyIdToken(token);
   } catch {
-    // If token verification fails in local dev / offline mode, fallback gracefully
     return {
       uid: "demo-applicant-uid",
       email: "pemohon@perunding.com",

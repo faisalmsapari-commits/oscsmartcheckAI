@@ -15,7 +15,7 @@ import {
   ExtractionSummary,
 } from "@/types/extraction";
 import { Application } from "@/types/application";
-import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
+import { DEMO_10_APPLICATIONS, getDemoFactsForApp } from "@/lib/seed/demoData";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -39,11 +39,35 @@ export default function LcpExtractionPage() {
   const { user, role } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
+  const initialFacts = applicationId ? (getDemoFactsForApp(applicationId) as unknown as PlanningFact[]) : [];
+
   const [application, setApplication] = useState<Application | null>(demoApp);
-  const [facts, setFacts] = useState<PlanningFact[]>([]);
-  const [summary, setSummary] = useState<ExtractionSummary | null>(null);
-  const [completeness, setCompleteness] = useState<ExtractionCompleteness | null>(null);
-  const [loading, setLoading] = useState(!demoApp);
+  const [facts, setFacts] = useState<PlanningFact[]>(initialFacts);
+  const [summary, setSummary] = useState<ExtractionSummary | null>({
+    documentVersion: 1,
+    documentId: `doc-${applicationId}-lcp`,
+    totalPages: 18,
+    totalExtracted: initialFacts.length,
+    highConfidenceCount: initialFacts.length,
+    mediumConfidenceCount: 0,
+    lowConfidenceCount: 0,
+    conflictCount: initialFacts.filter((f) => f.status === "CONFLICT").length,
+    notFoundCount: 0,
+    confirmedCount: initialFacts.filter((f) => f.status === "MANUALLY_CONFIRMED").length,
+    correctedCount: 0,
+  });
+  const [completeness, setCompleteness] = useState<ExtractionCompleteness | null>({
+    documentVersion: 1,
+    totalRequiredFacts: initialFacts.length,
+    extractedFacts: initialFacts.length,
+    confirmedFacts: initialFacts.filter((f) => f.status === "MANUALLY_CONFIRMED").length,
+    missingFacts: [],
+    conflicts: [],
+    lowConfidenceFacts: [],
+    completenessPercentage: 100,
+    readyForSmartCheck: true,
+  });
+  const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
