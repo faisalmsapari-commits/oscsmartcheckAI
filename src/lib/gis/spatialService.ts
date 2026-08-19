@@ -1,5 +1,6 @@
-import { getAdminDb } from "../firebase/admin.ts";
+import { getAdminDb, isCloudFirestoreConfigured } from "../firebase/admin.ts";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { getDemoGisForApp } from "../seed/demoDataSeeder.ts";
 import type {
   ApplicationSite,
   SiteType,
@@ -131,10 +132,28 @@ export async function getApplicationSite(
   applicationId: string,
   customDb?: Firestore
 ): Promise<ApplicationSite | null> {
-  const db = customDb || getAdminDb();
-  const snap = await db.collection(`applications/${applicationId}/site`).doc("current").get();
-  if (!snap.exists) return null;
-  return snap.data() as ApplicationSite;
+  if (!isCloudFirestoreConfigured()) {
+    try {
+      const demoGis = getDemoGisForApp(applicationId);
+      return (demoGis as any)?.site || null;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const db = customDb || getAdminDb();
+    const snap = await db.collection(`applications/${applicationId}/site`).doc("current").get();
+    if (!snap.exists) return null;
+    return snap.data() as ApplicationSite;
+  } catch {
+    try {
+      const demoGis = getDemoGisForApp(applicationId);
+      return (demoGis as any)?.site || null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 /**
