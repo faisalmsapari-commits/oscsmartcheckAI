@@ -64,7 +64,6 @@ export default function LcpExtractionPage() {
     missingFacts: [],
     conflicts: [],
     lowConfidenceFacts: [],
-    completenessPercentage: 100,
     readyForSmartCheck: true,
   });
   const [loading, setLoading] = useState(false);

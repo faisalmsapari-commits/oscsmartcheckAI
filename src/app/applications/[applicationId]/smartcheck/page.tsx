@@ -47,7 +47,7 @@ export default function SmartCheckMatrixPage() {
   const { user, role } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
-  const initialResults = applicationId ? getDemoSmartCheckForApp(applicationId) : [];
+  const initialResults = applicationId ? (getDemoSmartCheckForApp(applicationId) as unknown as RuleEvaluation[]) : [];
 
   const [application, setApplication] = useState<Application | null>(demoApp);
   const [smartCheck, setSmartCheck] = useState<SmartCheckRecord | null>(null);

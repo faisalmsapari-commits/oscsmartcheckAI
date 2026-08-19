@@ -135,7 +135,7 @@ export async function getApplicationSite(
   if (!isCloudFirestoreConfigured()) {
     try {
       const demoGis = getDemoGisForApp(applicationId);
-      return (demoGis as any)?.site || null;
+      return (demoGis?.site as unknown as ApplicationSite) || null;
     } catch {
       return null;
     }
@@ -149,7 +149,7 @@ export async function getApplicationSite(
   } catch {
     try {
       const demoGis = getDemoGisForApp(applicationId);
-      return (demoGis as any)?.site || null;
+      return (demoGis?.site as unknown as ApplicationSite) || null;
     } catch {
       return null;
     }

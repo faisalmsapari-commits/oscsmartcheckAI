@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApplicationIssues, createOfficerIssue } from "@/lib/issues/issueService";
 import { CreateIssueSchema } from "@/lib/validation/issues.schema";
-import { safeVerifyIdToken } from "@/lib/firebase/admin";
+import { safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { getDemoIssuesForApp } from "@/lib/seed/demoDataSeeder";
 
 export async function GET(

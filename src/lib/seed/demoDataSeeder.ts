@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Firestore } from "firebase-admin/firestore";
 import { getAdminDb } from "../firebase/admin.ts";
-import { DEMO_10_APPLICATIONS, DemoApplicationSeed } from "./demoData.ts";
+import { DEMO_10_APPLICATIONS, DemoApplicationSeed, getDemoApplication } from "./demoData.ts";
 export { DEMO_10_APPLICATIONS, type DemoApplicationSeed, getDemoApplication, getDemoSmartCheckForApp } from "./demoData.ts";
 
 /**
