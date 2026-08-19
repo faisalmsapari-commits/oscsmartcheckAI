@@ -336,17 +336,18 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     setIsProcessing(true);
     setProgressStep(0);
 
+    let currentStep = 0;
     const stepInterval = setInterval(() => {
-      setProgressStep((prev) => {
-        if (prev >= 3) {
-          clearInterval(stepInterval);
-          setIsProcessing(false);
-          setActiveExtractedPreset(targetPreset);
-          onDataExtracted(targetPreset.extractedData);
-          return 3;
-        }
-        return prev + 1;
-      });
+      currentStep += 1;
+      if (currentStep <= 3) {
+        setProgressStep(currentStep);
+      }
+      if (currentStep >= 3) {
+        clearInterval(stepInterval);
+        setIsProcessing(false);
+        setActiveExtractedPreset(targetPreset);
+        onDataExtracted(targetPreset.extractedData);
+      }
     }, 250);
   };
 
