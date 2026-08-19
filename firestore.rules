@@ -1,0 +1,343 @@
+rules_version = '2';
+
+// OSC SmartCheck AI - Cloud Firestore Security Rules
+// Majlis Perbandaran Langkawi Bandaraya Pelancongan (MPLBP)
+//
+// MODULE 07: LCP Document Intelligence & Structured Data Extraction
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === Global Helper Functions ===
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+
+    function isOfficer() {
+      return isAuthenticated() && (
+        request.auth.token.role in ['OSC_OFFICER', 'PLANNING_OFFICER', 'GIS_OFFICER', 'OSC_MANAGER', 'PLANNING_MANAGER', 'SUPER_ADMIN']
+      );
+    }
+
+    function isManager() {
+      return isAuthenticated() && (
+        request.auth.token.role in ['OSC_MANAGER', 'PLANNING_MANAGER', 'ADMIN', 'SUPER_ADMIN']
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role in ['ADMIN', 'SUPER_ADMIN']
+      );
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'SUPER_ADMIN';
+    }
+
+    function isApplicationOwner(applicationId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/applications/$(applicationId)).data.applicantUid == request.auth.uid;
+    }
+
+    // === Users Collection: users/{userId} ===
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isOfficer() || isAdmin();
+
+      allow create: if isOwner(userId) &&
+        request.resource.data.role == 'APPLICANT' &&
+        request.resource.data.organizationId == 'PUBLIC' &&
+        request.resource.data.active == true;
+
+      allow update: if (isOwner(userId) &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.organizationId == resource.data.organizationId &&
+        request.resource.data.active == resource.data.active
+      ) || isSuperAdmin();
+
+      allow delete: if false;
+    }
+
+    // === Organizations Collection: organizations/{organizationId} ===
+    match /organizations/{organizationId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // === Applications Collection: applications/{applicationId} ===
+    match /applications/{applicationId} {
+      // Read: Application owner, authorized officers, and admins
+      allow read: if isAuthenticated() && (
+        resource.data.applicantUid == request.auth.uid || isOfficer() || isAdmin()
+      );
+
+      // Create: Applicant may create own DRAFT application with strict defaults
+      allow create: if isAuthenticated() &&
+        request.resource.data.applicantUid == request.auth.uid &&
+        request.resource.data.status == 'DRAFT' &&
+        request.resource.data.assignedOfficerUid == null &&
+        request.resource.data.currentVersion == 1 &&
+        request.resource.data.submittedAt == null &&
+        request.resource.data.verifiedAt == null;
+
+      // Update:
+      // Client SDK can only update draft proposal fields while in DRAFT or REQUEST_INFORMATION.
+      // Status transitions MUST execute via trusted server-side transition service.
+      allow update: if (
+        isOwner(resource.data.applicantUid) &&
+        resource.data.status in ['DRAFT', 'REQUEST_INFORMATION'] &&
+        request.resource.data.applicantUid == resource.data.applicantUid &&
+        request.resource.data.assignedOfficerUid == resource.data.assignedOfficerUid &&
+        request.resource.data.status == resource.data.status
+      ) || isSuperAdmin();
+
+      // Deletion of applications from client is strictly forbidden
+      allow delete: if false;
+
+      // --- Subcollection: versions/{versionId} ---
+      match /versions/{versionId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow create: if false; // Managed via server transition service
+        allow update, delete: if false; // Version snapshots are permanently immutable
+      }
+
+      // --- Subcollection: documents/{documentId} ---
+      match /documents/{documentId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow create: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow update: if isOfficer() || isAdmin();
+        allow delete: if false;
+      }
+
+      // --- Subcollection: processingJobs/{jobId} ---
+      match /processingJobs/{jobId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow write: if false; // Server Admin SDK only
+      }
+
+      // --- Subcollection: documentAnalysis/{analysisId} ---
+      match /documentAnalysis/{analysisId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow write: if false; // Server Admin SDK only
+      }
+
+      // --- Subcollection: extractedFacts/{factId} ---
+      match /extractedFacts/{factId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow write: if false; // Server Admin SDK only via protected API endpoints
+      }
+
+      // --- Subcollection: smartChecks/{smartCheckId} ---
+      match /smartChecks/{smartCheckId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow write: if false; // Server Admin SDK only
+
+        match /results/{resultId} {
+          allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+          allow write: if false; // Server Admin SDK only
+
+          match /assessments/{officerUid} {
+            allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+            allow write: if (isOfficer() || isAdmin()) && request.auth.uid == officerUid;
+          }
+        }
+      }
+
+      // --- Subcollection: officerReviews/{reviewId} ---
+      match /officerReviews/{reviewId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow create: if isOfficer() || isAdmin();
+        // Once reviewStatus is VERIFIED, it is permanently locked and immutable
+        allow update: if (isOfficer() || isAdmin()) && resource.data.reviewStatus != 'VERIFIED';
+        allow delete: if false; // Verified history cannot be deleted
+      }
+
+      // --- Subcollection: issues/{issueId} ---
+      match /issues/{issueId} {
+        allow read: if (isApplicationOwner(applicationId) && resource.data.visibility == 'APPLICANT_VISIBLE') || isOfficer() || isAdmin();
+        allow write: if isOfficer() || isAdmin();
+
+        match /notes/{noteId} {
+          allow read: if (isApplicationOwner(applicationId) && resource.data.noteType == 'APPLICANT_VISIBLE') || isOfficer() || isAdmin();
+          allow write: if isOfficer() || isAdmin() || (isApplicationOwner(applicationId) && request.resource.data.noteType == 'APPLICANT_VISIBLE');
+        }
+      }
+
+      // --- Subcollection: commentDrafts/{draftId} ---
+      match /commentDrafts/{draftId} {
+        allow read: if isOfficer() || isAdmin();
+        allow write: if isOfficer() || isAdmin();
+      }
+
+      // --- Subcollection: verifiedComments/{commentId} ---
+      match /verifiedComments/{commentId} {
+        allow read: if (isApplicationOwner(applicationId) && resource.data.visibility == 'APPLICANT_VISIBLE') || isOfficer() || isAdmin();
+        allow create: if isOfficer() || isAdmin();
+        allow update: if isOfficer() || isAdmin();
+        allow delete: if false; // Immutable audit snapshot
+      }
+
+      // --- Subcollection: reports/{reportId} ---
+      match /reports/{reportId} {
+        allow read: if (isApplicationOwner(applicationId) && resource.data.visibility == 'APPLICANT_VISIBLE') || isOfficer() || isAdmin();
+        allow create, update: if isOfficer() || isAdmin();
+        allow delete: if false; // Immutable report snapshot
+      }
+
+      // --- Subcollection: statusHistory/{historyId} ---
+      match /statusHistory/{historyId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow create: if false; // Managed via server transition service
+        allow update, delete: if false; // Append-only audit transition log
+      }
+
+      // --- Subcollection: workflowHistory/{transitionId} ---
+      match /workflowHistory/{transitionId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow write: if false; // Append-only via server transition service
+      }
+
+      // --- Subcollection: requests/{requestId} ---
+      match /requests/{requestId} {
+        allow read: if (isApplicationOwner(applicationId) && resource.data.visibility == 'APPLICANT_VISIBLE') || isOfficer() || isAdmin();
+        allow write: if isOfficer() || isAdmin();
+
+        match /responses/{responseId} {
+          allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+          allow create: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+          allow update: if isOfficer() || isAdmin();
+          allow delete: if false;
+        }
+      }
+
+      // --- Subcollection: serviceTimers/{timerId} ---
+      match /serviceTimers/{timerId} {
+        allow read: if isOfficer() || isManager() || isAdmin();
+        allow write: if false; // Managed via server
+      }
+
+      // --- Subcollection: closureSnapshots/{snapshotId} ---
+      match /closureSnapshots/{snapshotId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isManager() || isAdmin();
+        allow write: if false; // Immutable snapshot via server
+      }
+
+      // --- Subcollection: cycles/{cycleId} ---
+      match /cycles/{cycleId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isManager() || isAdmin();
+        allow write: if false;
+      }
+
+      // --- Subcollection: resubmissionPackages/{packageId} ---
+      match /resubmissionPackages/{packageId} {
+        allow read: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow create: if isApplicationOwner(applicationId) || isOfficer() || isAdmin();
+        allow update, delete: if false;
+      }
+    }
+
+    // === Comment Templates: commentTemplates/{templateId} ===
+    match /commentTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasRole('OSC_OFFICER');
+    }
+
+    // === Planning Rule Sets: planningRuleSets/{ruleSetId} ===
+    match /planningRuleSets/{ruleSetId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasRole('PLANNING_OFFICER');
+
+      match /rules/{ruleId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin() || hasRole('PLANNING_OFFICER');
+      }
+    }
+
+    // === Guidelines: guidelines/{guidelineId} ===
+    match /guidelines/{guidelineId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // === Rule Sets: ruleSets/{ruleSetId} ===
+    match /ruleSets/{ruleSetId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // === System Config: systemConfig/{configId} ===
+    match /systemConfig/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // === AI Runs: aiRuns/{aiRunId} ===
+    match /aiRuns/{aiRunId} {
+      allow read: if isOfficer() || isAdmin();
+      allow write: if false; // Server Admin SDK only
+    }
+
+    // === Audit Logs: auditLogs/{auditLogId} ===
+    match /auditLogs/{auditLogId} {
+      allow read: if isAdmin() || hasRole('OSC_OFFICER');
+      allow write: if false; // Server Admin SDK only
+    }
+
+    // === Analytics Snapshots: analyticsSnapshots/{snapshotId} ===
+    match /analyticsSnapshots/{snapshotId} {
+      allow read: if isOfficer() || isManager() || isAdmin();
+      allow write: if false; // Server Admin SDK only
+    }
+
+    // === Management Targets: managementTargets/{targetId} ===
+    match /managementTargets/{targetId} {
+      allow read: if isOfficer() || isManager() || isAdmin();
+      allow write: if isManager() || isAdmin();
+    }
+
+    // === Notifications: notifications/{notificationId} ===
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.recipientUserId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.recipientUserId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'readAt']);
+      allow create, delete: if false; // Server SDK only
+    }
+
+    // === Notification Templates: notificationTemplates/{templateId} ===
+    match /notificationTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // === Escalations: escalations/{escalationId} ===
+    match /escalations/{escalationId} {
+      allow read: if isOfficer() || isManager() || isAdmin();
+      allow write: if isOfficer() || isManager() || isAdmin();
+    }
+
+    // === Work Items: workItems/{workItemId} ===
+    match /workItems/{workItemId} {
+      allow read: if isOfficer() || isManager() || isAdmin();
+      allow write: if isOfficer() || isManager() || isAdmin();
+    }
+
+    // === Service Level Policies: serviceLevelPolicies/{policyId} ===
+    match /serviceLevelPolicies/{policyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // === Default Deny ===
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

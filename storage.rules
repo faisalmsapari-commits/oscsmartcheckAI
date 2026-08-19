@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// OSC SmartCheck AI - Cloud Storage Security Rules
+// Majlis Perbandaran Langkawi Bandaraya Pelancongan (MPLBP)
+// MODULE 06: Document Upload & Version Management
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOfficerOrAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'OSC_OFFICER' ||
+        request.auth.token.role == 'PLANNING_OFFICER' ||
+        request.auth.token.role == 'GIS_OFFICER' ||
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.role == 'SUPER_ADMIN'
+      );
+    }
+
+    function isValidPdf() {
+      return request.resource.contentType == 'application/pdf' &&
+             request.resource.size <= 52428800; // 50MB
+    }
+
+    // Match document upload path: applications/{applicationId}/documents/{documentType}/v{version}/{fileName}
+    match /applications/{applicationId}/documents/{documentType}/{versionPath}/{fileName} {
+      
+      // Read: Allowed for authenticated application owner or authorized officers
+      allow read: if isAuthenticated() && (
+        isOfficerOrAdmin() ||
+        (request.auth.token.role == 'APPLICANT' && 
+         firestore.get(/databases/(default)/documents/applications/$(applicationId)).data.applicantUid == request.auth.uid)
+      );
+
+      // Write: Allowed for authenticated applicant owning the application, provided file is PDF <= 50MB,
+      // and application is not VERIFIED or COMPLETED.
+      allow write: if isAuthenticated() &&
+        isValidPdf() &&
+        (
+          isOfficerOrAdmin() ||
+          (
+            request.auth.token.role == 'APPLICANT' &&
+            firestore.get(/databases/(default)/documents/applications/$(applicationId)).data.applicantUid == request.auth.uid &&
+            firestore.get(/databases/(default)/documents/applications/$(applicationId)).data.status != 'VERIFIED' &&
+            firestore.get(/databases/(default)/documents/applications/$(applicationId)).data.status != 'COMPLETED'
+          )
+        );
+    }
+
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
