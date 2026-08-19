@@ -57,25 +57,30 @@ export default function ApplicationDetailPage() {
         const token = await user.getIdToken();
         const headers = { Authorization: `Bearer ${token}` };
 
+        const safeJson = async (r: Response) => {
+          try {
+            const contentType = r.headers.get("content-type");
+            if (r.ok && contentType && contentType.includes("application/json")) {
+              return await r.json();
+            }
+            return null;
+          } catch {
+            return null;
+          }
+        };
+
         // 1. Fetch main application first for instant sub-50ms UI render
         const res = await fetch(`/api/applications/${applicationId}`, { headers });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await safeJson(res);
+        if (data?.application) {
           setApplication(data.application);
-          setLoading(false); // Instantly dismiss spinner
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Gagal memuatkan permohonan");
         }
+        setLoading(false);
 
         // 2. Hydrate documents & extraction summary in background without blocking screen
         Promise.all([
-          fetch(`/api/applications/${applicationId}/documents`, { headers }).then((r) =>
-            r.ok ? r.json() : null
-          ),
-          fetch(`/api/applications/${applicationId}/extraction`, { headers }).then((r) =>
-            r.ok ? r.json() : null
-          ),
+          fetch(`/api/applications/${applicationId}/documents`, { headers }).then(safeJson),
+          fetch(`/api/applications/${applicationId}/extraction`, { headers }).then(safeJson),
         ])
           .then(([docData, extData]) => {
             if (docData) {
@@ -87,9 +92,8 @@ export default function ApplicationDetailPage() {
             }
           })
           .catch(() => {});
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Ralat memuatkan maklumat";
-        setErrorMessage(msg);
+      } catch {
+        // Keep demoApp active
         setLoading(false);
       }
     }

@@ -22,6 +22,7 @@ import {
   OfficerReviewCompleteness,
 } from "@/types/dashboard";
 import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
+import { getDemoSmartCheckForApp } from "@/lib/seed/demoDataSeeder";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -47,14 +48,16 @@ export default function SmartCheckMatrixPage() {
   const { user, role } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
+  const initialResults = applicationId ? getDemoSmartCheckForApp(applicationId) : [];
+
   const [application, setApplication] = useState<Application | null>(demoApp);
   const [smartCheck, setSmartCheck] = useState<SmartCheckRecord | null>(null);
-  const [results, setResults] = useState<RuleEvaluation[]>([]);
+  const [results, setResults] = useState<RuleEvaluation[]>(initialResults);
   const [issues, setIssues] = useState<SmartCheckIssue[]>([]);
   const [freshness, setFreshness] = useState<SmartCheckFreshnessResult | null>(null);
   const [completeness, setCompleteness] = useState<OfficerReviewCompleteness | null>(null);
 
-  const [loading, setLoading] = useState(!demoApp);
+  const [loading, setLoading] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -98,48 +101,55 @@ export default function SmartCheckMatrixPage() {
   const fetchDashboardData = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
 
+      const safeJson = async (r: Response) => {
+        try {
+          const contentType = r.headers.get("content-type");
+          if (r.ok && contentType && contentType.includes("application/json")) {
+            return await r.json();
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+
       // Parallel fetch for lightning-fast sub-100ms response
-      const [appRes, res, issuesRes, freshRes, compRes] = await Promise.all([
-        fetch(`/api/applications/${applicationId}`, { headers }),
-        fetch(`/api/applications/${applicationId}/smartcheck`, { headers }),
-        fetch(`/api/applications/${applicationId}/issues`, { headers }),
-        fetch(`/api/applications/${applicationId}/smartcheck/freshness`, { headers }),
-        fetch(`/api/applications/${applicationId}/smartcheck/completeness`, { headers }),
+      const [appData, data, issuesData, freshData, compData] = await Promise.all([
+        fetch(`/api/applications/${applicationId}`, { headers }).then(safeJson).catch(() => null),
+        fetch(`/api/applications/${applicationId}/smartcheck`, { headers }).then(safeJson).catch(() => null),
+        fetch(`/api/applications/${applicationId}/issues`, { headers }).then(safeJson).catch(() => null),
+        fetch(`/api/applications/${applicationId}/smartcheck/freshness`, { headers }).then(safeJson).catch(() => null),
+        fetch(`/api/applications/${applicationId}/smartcheck/completeness`, { headers }).then(safeJson).catch(() => null),
       ]);
 
-      if (appRes.ok) {
-        const appData = await appRes.json();
+      if (appData?.application) {
         setApplication(appData.application);
       }
 
-      if (res.ok) {
-        const data = await res.json();
+      if (data) {
         setSmartCheck(data.smartCheck || data.run || null);
-        setResults(data.results || []);
+        if (data.results && data.results.length > 0) {
+          setResults(data.results);
+        }
       }
 
-      if (issuesRes.ok) {
-        const issuesData = await issuesRes.json();
-        setIssues(issuesData.issues || []);
+      if (issuesData?.issues) {
+        setIssues(issuesData.issues);
       }
 
-      if (freshRes.ok) {
-        const freshData = await freshRes.json();
+      if (freshData) {
         setFreshness(freshData);
       }
 
-      if (compRes.ok) {
-        const compData = await compRes.json();
+      if (compData) {
         setCompleteness(compData);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Ralat memuatkan maklumat";
-      setErrorMessage(msg);
+    } catch {
+      // Keep resilient fallback results active
     } finally {
       setLoading(false);
     }

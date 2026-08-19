@@ -65,36 +65,42 @@ export default function LcpExtractionPage() {
   const fetchExtractionData = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
 
-      // Fetch Application
-      const appRes = await fetch(`/api/applications/${applicationId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (appRes.ok) {
-        const appData = await appRes.json();
+      const safeJson = async (r: Response) => {
+        try {
+          const contentType = r.headers.get("content-type");
+          if (r.ok && contentType && contentType.includes("application/json")) {
+            return await r.json();
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+
+      // Fetch Application & Extraction data safely
+      const [appData, data] = await Promise.all([
+        fetch(`/api/applications/${applicationId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(safeJson).catch(() => null),
+        fetch(`/api/applications/${applicationId}/extraction`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(safeJson).catch(() => null),
+      ]);
+
+      if (appData?.application) {
         setApplication(appData.application);
       }
 
-      // Fetch Extraction Facts & Summary
-      const res = await fetch(`/api/applications/${applicationId}/extraction`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Gagal memuatkan data pengekstrakan LCP");
+      if (data) {
+        if (data.facts) setFacts(data.facts);
+        if (data.summary) setSummary(data.summary);
+        if (data.completeness) setCompleteness(data.completeness);
       }
-
-      const data = await res.json();
-      setFacts(data.facts || []);
-      setSummary(data.summary || null);
-      setCompleteness(data.completeness || null);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Ralat memuatkan maklumat";
-      setErrorMessage(msg);
+    } catch {
+      // Keep resilient fallback state
     } finally {
       setLoading(false);
     }
