@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { confirmExtractedFact } from "@/lib/extraction/extractionService";
 
 interface RouteParams {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const db = getAdminDb();
+    const db = isCloudFirestoreConfigured() ? getAdminDb() : undefined;
 
     await confirmExtractedFact(applicationId, factId, uid, body.confirmedValue, db);
     return NextResponse.json({ success: true, message: "Fakta perancangan berjaya disahkan." }, { status: 200 });

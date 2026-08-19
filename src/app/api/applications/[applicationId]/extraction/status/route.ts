@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { ProcessingJob } from "@/types/extraction";
 
 interface RouteParams {
@@ -18,6 +18,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
     const token = authHeader.split("Bearer ")[1];
     await getAdminAuth().verifyIdToken(token);
+
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      return NextResponse.json({ job: null }, { status: 200 });
+    }
 
     const db = getAdminDb();
     const jobSnap = await db

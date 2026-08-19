@@ -1,4 +1,4 @@
-import { getAdminDb } from "../firebase/admin.ts";
+import { getAdminDb, isCloudFirestoreConfigured } from "../firebase/admin.ts";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type {
   PlanningFact,
@@ -27,6 +27,15 @@ export async function startLcpProcessing(
   forceReprocess: boolean = false,
   customDb?: Firestore
 ): Promise<{ jobId: string; status: string; isNewJob: boolean }> {
+  // Demo applications or local dev mode fallback
+  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+    return {
+      jobId: `job-demo-reprocess-${Date.now()}`,
+      status: "COMPLETED",
+      isNewJob: true,
+    };
+  }
+
   const db = customDb || getAdminDb();
 
   // 1. Authorization Verification
@@ -347,6 +356,10 @@ export async function confirmExtractedFact(
   confirmedValue?: unknown,
   customDb?: Firestore
 ): Promise<void> {
+  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+    return;
+  }
+
   const db = customDb || getAdminDb();
   const factRef = db.collection(`applications/${applicationId}/extractedFacts`).doc(factId);
   const snap = await factRef.get();
@@ -393,6 +406,10 @@ export async function correctExtractedFact(
   reason?: string,
   customDb?: Firestore
 ): Promise<void> {
+  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+    return;
+  }
+
   const db = customDb || getAdminDb();
   const factRef = db.collection(`applications/${applicationId}/extractedFacts`).doc(factId);
   const snap = await factRef.get();
@@ -439,6 +456,10 @@ export async function markFactUnknown(
   officerUid: string,
   customDb?: Firestore
 ): Promise<void> {
+  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+    return;
+  }
+
   const db = customDb || getAdminDb();
   const factRef = db.collection(`applications/${applicationId}/extractedFacts`).doc(factId);
   const snap = await factRef.get();

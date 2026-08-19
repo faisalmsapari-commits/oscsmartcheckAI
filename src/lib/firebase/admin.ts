@@ -73,12 +73,36 @@ export function getAdminAuth(): Auth {
         sub: "demo-applicant-uid",
       };
     }
-    if (typeof token === "string" && (token.startsWith("mock-token-for-") || token.startsWith("mock-") || token.startsWith("demo-") || !token.includes("."))) {
-      const rolePart = token.replace("mock-token-for-", "").replace("mock-", "").replace("demo-", "").toUpperCase() || "APPLICANT";
+
+    if (!isCloudFirestoreConfigured() || (typeof token === "string" && (token.startsWith("mock-") || token.startsWith("demo-") || !token.includes(".")))) {
+      let role = "APPLICANT";
+      let email = "pemohon@perunding.com";
+      let uid = "demo-applicant-uid";
+
+      if (typeof token === "string") {
+        if (token.startsWith("mock-token-for-")) {
+          role = token.replace("mock-token-for-", "").toUpperCase();
+          email = `${role.toLowerCase()}@mplbp.gov.my`;
+          uid = `demo-${role.toLowerCase()}-uid`;
+        } else if (token.includes(".")) {
+          try {
+            const parts = token.split(".");
+            if (parts[1]) {
+              const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+              if (payload.role) role = payload.role;
+              if (payload.email) email = payload.email;
+              if (payload.user_id || payload.sub || payload.uid) uid = payload.user_id || payload.sub || payload.uid;
+            }
+          } catch {
+            // fallback
+          }
+        }
+      }
+
       return {
-        uid: `demo-${rolePart.toLowerCase()}-uid`,
-        email: `${rolePart.toLowerCase()}@mplbp.gov.my`,
-        role: rolePart,
+        uid,
+        email,
+        role,
         organizationId: "MPLBP",
         aud: "osc-smartcheck-mplbp",
         auth_time: Math.floor(Date.now() / 1000),
@@ -86,9 +110,10 @@ export function getAdminAuth(): Auth {
         firebase: { identities: {}, sign_in_provider: "custom" },
         iat: Math.floor(Date.now() / 1000),
         iss: "https://securetoken.google.com/osc-smartcheck-mplbp",
-        sub: `demo-${rolePart.toLowerCase()}-uid`,
+        sub: uid,
       };
     }
+
     try {
       return await originalVerify(token, checkRevoked);
     } catch {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { correctExtractedFact } from "@/lib/extraction/extractionService";
 
 interface RouteParams {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ code: "VALIDATION_FAILED", error: "Nilai pembetulan diperlukan." }, { status: 400 });
     }
 
-    const db = getAdminDb();
+    const db = isCloudFirestoreConfigured() ? getAdminDb() : undefined;
     await correctExtractedFact(applicationId, factId, correctedValue, uid, reason, db);
 
     return NextResponse.json({ success: true, message: "Pembetulan fakta berjaya disimpan." }, { status: 200 });

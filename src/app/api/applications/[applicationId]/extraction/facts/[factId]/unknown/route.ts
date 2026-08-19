@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { markFactUnknown } from "@/lib/extraction/extractionService";
 
 interface RouteParams {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const db = getAdminDb();
+    const db = isCloudFirestoreConfigured() ? getAdminDb() : undefined;
     await markFactUnknown(applicationId, factId, uid, db);
 
     return NextResponse.json({ success: true, message: "Fakta telah ditandakan sebagai Tidak Ditemui." }, { status: 200 });
