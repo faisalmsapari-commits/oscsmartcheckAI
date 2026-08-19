@@ -18,6 +18,10 @@ export async function GET(req: NextRequest) {
     const role = (decodedToken.role as string) || "APPLICANT";
     const uid = decodedToken.uid;
 
+    if (!isCloudFirestoreConfigured()) {
+      return NextResponse.json({ applications: getAllApplicationsFromStore() }, { status: 200 });
+    }
+
     const db = getAdminDb();
     let snap;
 
