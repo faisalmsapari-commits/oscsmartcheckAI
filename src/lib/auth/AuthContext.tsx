@@ -270,8 +270,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== "undefined") {
         localStorage.removeItem("osc_mock_user");
       }
-      const auth = getFirebaseAuth();
-      await firebaseSignOut(auth).catch(() => {});
+      try {
+        const auth = getFirebaseAuth();
+        await firebaseSignOut(auth).catch(() => {});
+      } catch (e) {
+        console.warn("[AuthContext] Sign out fallback:", e);
+      }
       setUser(null);
       setProfile(null);
       setRole(null);

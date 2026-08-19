@@ -2,7 +2,6 @@ import React from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { DisclaimerBanner } from "@/components/ui/DisclaimerBanner";
 import {
@@ -54,15 +53,17 @@ export default function HomePage() {
                 Log masuk untuk memulakan semakan pra-permohonan atau pengesahan teknikal.
               </p>
               <div className="mt-4 space-y-2">
-                <Link href="/login" className="block w-full">
-                  <Button variant="primary" className="w-full bg-gold-500 font-bold text-gov-950 hover:bg-gold-400">
-                    Log Masuk Portal
-                  </Button>
+                <Link
+                  href="/login"
+                  className="flex w-full items-center justify-center rounded-lg bg-gold-500 py-2.5 text-xs font-bold text-gov-950 shadow-sm transition hover:bg-gold-400"
+                >
+                  Log Masuk Portal
                 </Link>
-                <Link href="/dashboard" className="block w-full">
-                  <Button variant="outline" className="w-full border-slate-600 bg-gov-900 text-slate-200 hover:bg-gov-700 hover:text-white">
-                    Papan Pemuka OSC
-                  </Button>
+                <Link
+                  href="/dashboard"
+                  className="flex w-full items-center justify-center rounded-lg border border-slate-600 bg-gov-900 py-2.5 text-xs font-semibold text-slate-200 transition hover:bg-gov-700 hover:text-white"
+                >
+                  Papan Pemuka OSC
                 </Link>
               </div>
               <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
