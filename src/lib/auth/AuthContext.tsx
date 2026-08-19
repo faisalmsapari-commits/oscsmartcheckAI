@@ -165,25 +165,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const auth = getFirebaseAuth();
+    try {
+      const auth = getFirebaseAuth();
 
-    const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        await fetchAndSyncProfile(currentUser);
-      } else {
-        const savedMock = typeof window !== "undefined" ? localStorage.getItem("osc_mock_user") : null;
-        if (!savedMock) {
-          setUser(null);
-          setProfile(null);
-          setRole(null);
-          setOrganizationId(null);
+      const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
+        if (currentUser) {
+          setUser(currentUser);
+          await fetchAndSyncProfile(currentUser);
+        } else {
+          const savedMock = typeof window !== "undefined" ? localStorage.getItem("osc_mock_user") : null;
+          if (!savedMock) {
+            setUser(null);
+            setProfile(null);
+            setRole(null);
+            setOrganizationId(null);
+          }
         }
-      }
-      setIsLoading(false);
-    });
+        setIsLoading(false);
+      });
 
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn("[AuthContext] Firebase auth listener fallback:", err);
+      setIsLoading(false);
+    }
   }, [fetchAndSyncProfile]);
 
   const signInWithEmail = async (email: string, password: string) => {

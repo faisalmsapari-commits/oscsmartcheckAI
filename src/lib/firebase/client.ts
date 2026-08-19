@@ -3,6 +3,15 @@ import { getFirebaseConfig, getFirebaseRuntimeStatus } from "./config";
 
 let cachedApp: FirebaseApp | null = null;
 
+const FALLBACK_DEMO_CONFIG = {
+  apiKey: "AIzaSyMockDemoKeyForOSCSmartCheck2026",
+  authDomain: "osc-smartcheck-mplbp.firebaseapp.com",
+  projectId: "osc-smartcheck-mplbp",
+  storageBucket: "osc-smartcheck-mplbp.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:demo-oscsmartcheck",
+};
+
 /**
  * Initializes and returns the singleton Firebase App instance.
  * Reuses existing initialized instance if already available.
@@ -21,22 +30,22 @@ export function getFirebaseApp(): FirebaseApp {
   const config = getFirebaseConfig();
   const status = getFirebaseRuntimeStatus();
 
-  // If running in development without config, initialize with placeholder to prevent build-time crash
-  if (!status.isConfigured && typeof window === "undefined") {
-    cachedApp = initializeApp(
-      {
-        apiKey: "mock-api-key-build-only",
-        authDomain: "localhost",
-        projectId: "osc-smartcheck-mplbp",
-        storageBucket: "localhost",
-        messagingSenderId: "000000000000",
-        appId: "1:000000000000:web:mock",
-      },
-      "build-placeholder"
-    );
+  try {
+    if (!status.isConfigured) {
+      cachedApp = initializeApp(FALLBACK_DEMO_CONFIG);
+      return cachedApp;
+    }
+
+    cachedApp = initializeApp(config);
+    return cachedApp;
+  } catch (err) {
+    console.warn("[Firebase] Standard init fallback triggered:", err);
+    if (existingApps.length > 0) {
+      cachedApp = existingApps[0];
+      return cachedApp;
+    }
+    cachedApp = initializeApp(FALLBACK_DEMO_CONFIG, "fallback-app");
     return cachedApp;
   }
-
-  cachedApp = initializeApp(config);
-  return cachedApp;
 }
+
