@@ -21,8 +21,7 @@ import {
   SmartCheckFreshnessResult,
   OfficerReviewCompleteness,
 } from "@/types/dashboard";
-import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
-import { getDemoSmartCheckForApp } from "@/lib/seed/demoDataSeeder";
+import { DEMO_10_APPLICATIONS, getDemoSmartCheckForApp } from "@/lib/seed/demoData";
 import {
   ArrowLeft,
   CheckCircle2,
