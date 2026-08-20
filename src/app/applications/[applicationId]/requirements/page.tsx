@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { SmartCheckIssue } from "@/types/issues";
-import { getDemoIssuesForApp } from "@/lib/seed/demoDataSeeder";
+import { getDemoIssuesForApp } from "@/lib/seed/demoData";
 import {
   ArrowLeft,
   AlertCircle,

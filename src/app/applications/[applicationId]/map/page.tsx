@@ -20,8 +20,7 @@ import {
 } from "@/types/gis";
 import { generateApplicationLayoutPlan } from "@/lib/gis/layoutPlanProvider";
 import dynamic from "next/dynamic";
-import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
-import { getDemoGisForApp } from "@/lib/seed/demoDataSeeder";
+import { DEMO_10_APPLICATIONS, getDemoGisForApp } from "@/lib/seed/demoData";
 import {
   ArrowLeft,
   MapPin,
