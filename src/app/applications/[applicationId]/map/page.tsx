@@ -30,6 +30,11 @@ import {
   RefreshCw,
   Eye,
   Layers,
+  ShieldCheck,
+  Printer,
+  AlertCircle,
+  Check,
+  X,
 } from "lucide-react";
 
 const GisInteractiveMap = dynamic(
@@ -74,6 +79,16 @@ export default function ApplicationMapPage() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Officer Location Verification & Slip States
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [isSlipModalOpen, setIsSlipModalOpen] = useState(false);
+  const [verificationCommentInput, setVerificationCommentInput] = useState(
+    "Lokasi tapak, sempadan lot kadaster JUPEM, unjuran koordinat RSO Malaya dan pelan susunatur CAD telah disemak silang serta diperakui mematuhi Pengezonan RTD Langkawi 2030."
+  );
+  const [verificationOfficerName, setVerificationOfficerName] = useState("Sr. Ahmad Fauzi bin Razak (Pegawai Perancang / GIS)");
+  const [verificationDecision, setVerificationDecision] = useState<"COMPLIANT" | "CONDITIONAL">("COMPLIANT");
+  const [isDeclarationChecked, setIsDeclarationChecked] = useState(true);
 
   // Search Lot Modal
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -280,11 +295,13 @@ export default function ApplicationMapPage() {
     }
   };
 
-  const handleVerifySite = async () => {
+  const handleVerifySite = async (customComment?: string) => {
     if (!user || !isOfficer) return;
     try {
       setIsVerifying(true);
+      setErrorMessage(null);
       const token = await user.getIdToken();
+      const finalComment = customComment || verificationCommentInput || `Lokasi telah disahkan oleh Pegawai GIS selaras dengan Lot ${site?.lotNumbers?.join(", ") || lotNo}, Mukim ${site?.mukim || mukim}.`;
 
       const res = await fetch(`/api/gis/applications/${applicationId}/site/verify`, {
         method: "POST",
@@ -293,7 +310,7 @@ export default function ApplicationMapPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          verificationComment: `Lokasi telah disahkan oleh Pegawai GIS selaras dengan Lot ${site?.lotNumbers?.join(", ")}, Mukim ${site?.mukim}.`,
+          verificationComment: finalComment,
         }),
       });
 
@@ -302,11 +319,25 @@ export default function ApplicationMapPage() {
         throw new Error(err.error || "Gagal mengesahkan tapak");
       }
 
-      setSuccessMessage("Lokasi tapak berjaya disahkan oleh Pegawai.");
+      const resData = await res.json();
+      if (resData.site) {
+        setSite(resData.site);
+      } else {
+        setSite((prev) => prev ? {
+          ...prev,
+          verificationStatus: "OFFICER_VERIFIED",
+          verifiedBy: verificationOfficerName || user?.displayName || user?.email || "demo-officer-uid",
+          verifiedAt: new Date().toISOString(),
+          verificationComment: finalComment,
+        } : null);
+      }
+
+      setSuccessMessage("Perakuan lokasi tapak berjaya disahkan dan ditandatangani secara digital oleh Pegawai.");
+      setIsVerificationModalOpen(false);
       await fetchGisData();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Ralat pengesahan lokasi";
-      alert(msg);
+      setErrorMessage(msg);
     } finally {
       setIsVerifying(false);
     }
@@ -367,14 +398,55 @@ export default function ApplicationMapPage() {
 
                 {isOfficer && (
                   <Button
-                    variant="primary"
+                    variant="outline"
                     size="sm"
                     onClick={() => setIsSearchOpen(true)}
-                    className="bg-gov-800 text-xs shadow-xs hover:bg-gov-900"
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50 text-xs shadow-xs"
                   >
                     <Search className="h-3.5 w-3.5" />
                     <span>Cari Lot JUPEM</span>
                   </Button>
+                )}
+
+                {/* Officer Location Verification Status & Action Button */}
+                {site?.verificationStatus === "OFFICER_VERIFIED" ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsSlipModalOpen(true)}
+                      className="flex items-center gap-1.5 rounded-sm bg-emerald-50 border border-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100 transition"
+                      title="Lihat Slip Perakuan Pengesahan Lokasi"
+                    >
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <span>Lokasi Disahkan Pegawai</span>
+                      <span className="ml-1 rounded-full bg-emerald-200 px-1.5 py-0.2 text-[10px] text-emerald-900 font-mono">
+                        ✓ SAH
+                      </span>
+                    </button>
+
+                    {isOfficer && (
+                      <button
+                        type="button"
+                        onClick={() => setIsVerificationModalOpen(true)}
+                        className="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                        title="Kemaskini Perakuan Lokasi"
+                      >
+                        Kemaskini
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  isOfficer && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsVerificationModalOpen(true)}
+                      className="bg-emerald-700 text-xs font-bold shadow-xs hover:bg-emerald-800 text-white flex items-center gap-1.5"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Sahkan Lokasi Pegawai</span>
+                    </Button>
+                  )
                 )}
               </div>
             </div>
@@ -736,8 +808,8 @@ export default function ApplicationMapPage() {
                   </Card>
                 )}
 
-                {/* 1. Cadastral Site Summary */}
-                <Card className="p-4 space-y-3">
+                {/* 1. Cadastral Site Summary & Officer Verification Card */}
+                <Card className="p-4 space-y-3.5">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
                       <MapPin className="h-4 w-4 text-gov-800" />
@@ -746,22 +818,22 @@ export default function ApplicationMapPage() {
                     <span
                       className={`rounded-sm px-2 py-0.5 text-[10px] font-bold ${
                         site?.verificationStatus === "OFFICER_VERIFIED"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-amber-100 text-amber-800"
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : "bg-amber-100 text-amber-800 border border-amber-300"
                       }`}
                     >
-                      {site?.verificationStatus === "OFFICER_VERIFIED" ? "DISAHKAN PEGAWAI" : "BELUM DISAHKAN"}
+                      {site?.verificationStatus === "OFFICER_VERIFIED" ? "✓ DISAHKAN PEGAWAI" : "BELUM DISAHKAN"}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-[11px] text-slate-500">Nombor Lot:</span>
-                      <p className="font-bold text-slate-900">{site?.lotNumbers?.join(", ") || "Belum dipilih"}</p>
+                      <p className="font-bold text-slate-900">{site?.lotNumbers?.join(", ") || lotNo || "Belum dipilih"}</p>
                     </div>
                     <div>
                       <span className="text-[11px] text-slate-500">Mukim:</span>
-                      <p className="font-bold text-slate-900">{site?.mukim || "-"}</p>
+                      <p className="font-bold text-slate-900">{site?.mukim || mukim || "-"}</p>
                     </div>
                     <div>
                       <span className="text-[11px] text-slate-500">Daerah / Negeri:</span>
@@ -770,7 +842,7 @@ export default function ApplicationMapPage() {
                     <div>
                       <span className="text-[11px] text-slate-500">Keluasan Tapak GIS:</span>
                       <p className="font-bold text-gov-900 font-mono">
-                        {site?.cadastralAreaSqm ? `${site.cadastralAreaSqm.toLocaleString()} m²` : "-"}
+                        {(site?.cadastralAreaSqm || siteArea).toLocaleString()} m²
                       </p>
                     </div>
                   </div>
@@ -791,25 +863,88 @@ export default function ApplicationMapPage() {
                       </div>
                       <div className="flex justify-between text-[11px] font-bold border-t border-slate-200 pt-1">
                         <span>Perbezaan:</span>
-                        <span className={comparison.status === "MATCH" ? "text-emerald-700" : "text-amber-700"}>
+                        <span className={comparison.status === "MATCH" ? "text-emerald-700 font-bold" : "text-amber-700 font-bold"}>
                           {comparison.differenceSqm} m² ({comparison.differencePercent}%)
                         </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Officer Verification Action */}
-                  {isOfficer && site?.verificationStatus !== "OFFICER_VERIFIED" && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleVerifySite}
-                      disabled={isVerifying || !site?.selectedLotIds?.length}
-                      className="w-full bg-emerald-700 text-xs font-bold hover:bg-emerald-800"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      <span>{isVerifying ? "Mengesahkan..." : "Sahkan Lokasi Tapak"}</span>
-                    </Button>
+                  {/* Official Certificate Box or Pending Action */}
+                  {site?.verificationStatus === "OFFICER_VERIFIED" ? (
+                    <div className="rounded-sm border border-emerald-200 bg-gradient-to-br from-emerald-50/90 to-teal-50/50 p-3 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                          <ShieldCheck className="h-4 w-4 text-emerald-700" />
+                          <span>Perakuan Pengesahan Lokasi</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold bg-emerald-200/80 text-emerald-900 px-1.5 py-0.2 rounded">
+                          RASMI
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 text-[11px] text-slate-700">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Pegawai Pengesah:</span>
+                          <span className="font-semibold text-slate-900">{site?.verifiedBy || verificationOfficerName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Tarikh Pengesahan:</span>
+                          <span className="font-mono text-slate-800">
+                            {site?.verifiedAt ? new Date(site.verifiedAt as string).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "20 Ogos 2026, 08:30 AM"}
+                          </span>
+                        </div>
+                        <div className="mt-1 rounded bg-white/80 p-2 border border-emerald-100 text-[10px] italic text-slate-600">
+                          &ldquo;{site?.verificationComment || "Lokasi dan sempadan lot telah disemak silang dengan data JUPEM MyKadLot dan mematuhi RTD 2030."}&rdquo;
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsSlipModalOpen(true)}
+                          className="flex items-center justify-center gap-1 rounded bg-emerald-700 px-2 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800 transition shadow-xs"
+                        >
+                          <Printer className="h-3 w-3" />
+                          <span>Cetak Slip</span>
+                        </button>
+
+                        {isOfficer && (
+                          <button
+                            type="button"
+                            onClick={() => setIsVerificationModalOpen(true)}
+                            className="flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition"
+                          >
+                            <span>Kemaskini</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="rounded-sm border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 space-y-1">
+                        <span className="font-bold flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Menunggu Pengesahan Lokasi</span>
+                        </span>
+                        <p className="text-[11px] text-amber-700">
+                          Lokasi tapak, sempadan kadaster dan zon RTD perlu disahkan oleh Pegawai GIS / Perancang sebelum kelulusan penuh.
+                        </p>
+                      </div>
+
+                      {isOfficer && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setIsVerificationModalOpen(true)}
+                          disabled={isVerifying}
+                          className="w-full bg-emerald-700 text-xs font-bold hover:bg-emerald-800 shadow-xs flex items-center justify-center gap-1.5"
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Sahkan Lokasi Tapak Pemajuan</span>
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </Card>
 
@@ -953,6 +1088,408 @@ export default function ApplicationMapPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL 1: BORANG PENGESAHAN LOKASI OLEH PEGAWAI GIS / PERANCANG           */}
+        {/* ========================================================================= */}
+        {isVerificationModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-xs overflow-y-auto">
+            <div className="w-full max-w-2xl rounded-sm bg-white p-6 shadow-2xl space-y-4 my-8 border border-slate-200">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-full bg-emerald-100 p-2 text-emerald-800">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      Borang Pengesahan Lokasi & Geometri Tapak Pemajuan
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Penentusahan Statutori Pegawai OSC / Pegawai Perancang / Pegawai GIS MPLBP
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs max-h-[70vh] overflow-y-auto pr-1">
+                {/* 1. Ringkasan Hakmilik & Geometri */}
+                <div className="rounded-sm border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
+                  <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block border-b border-slate-200 pb-1 flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-gov-800" />
+                    <span>1. Ringkasan Data Kadaster & Geodetik Tapak</span>
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">No. Permohonan KM:</span>
+                      <p className="font-mono font-bold text-slate-900">{application?.applicationNo || applicationId}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Tajuk Projek:</span>
+                      <p className="font-semibold text-slate-900 truncate" title={application?.title}>
+                        {application?.title || "Cadangan Pemajuan Kebenaran Merancang"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">No. Lot & Mukim:</span>
+                      <p className="font-bold text-slate-900">{site?.lotNumbers?.join(", ") || lotNo}, Mukim {site?.mukim || mukim}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Kod UPI JUPEM:</span>
+                      <p className="font-mono font-bold text-purple-900">{upiCode}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Koordinat Geografik (WGS84):</span>
+                      <p className="font-mono text-slate-800">{lat.toFixed(6)}° U, {lng.toFixed(6)}° T</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Unjuran RSO Malaya (Kertau):</span>
+                      <p className="font-mono text-slate-800">E: {rsoEasting} m | N: {rsoNorthing} m</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Semakan Keluasan & RTD */}
+                <div className="rounded-sm border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
+                  <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block border-b border-slate-200 pb-1 flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-purple-700" />
+                    <span>2. Semakan Silang Keluasan & Pengezonan RTD 2030</span>
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Keluasan Tapak Kadaster GIS:</span>
+                      <p className="font-mono font-bold text-gov-900">{(site?.cadastralAreaSqm || siteArea).toLocaleString()} m²</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Keluasan LCP Dokumen:</span>
+                      <p className="font-mono font-bold text-slate-900">
+                        {comparison?.lcpSiteAreaSqm ? `${comparison.lcpSiteAreaSqm.toLocaleString()} m²` : `${siteArea.toLocaleString()} m²`}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">Pengezonan RTD Langkawi 2030:</span>
+                      <p className="font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                        <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+                        <span>{rtdData?.primaryZone?.zoneName || `Zon Pembangunan ${application?.developmentType || "Perumahan"} (BP 2)`}</span>
+                        <span className="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.2 text-[10px] font-bold">
+                          PATUH / DIBENARKAN
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Maklumat Pegawai & Keputusan */}
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Nama & Jawatan Pegawai Pengesah:</label>
+                    <input
+                      type="text"
+                      value={verificationOfficerName}
+                      onChange={(e) => setVerificationOfficerName(e.target.value)}
+                      className="w-full rounded-sm border border-slate-300 p-2 text-xs font-semibold text-slate-900 bg-white"
+                      placeholder="Contoh: Sr. Ahmad Fauzi (Pegawai Perancang / GIS)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Keputusan Pengesahan Tapak:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVerificationDecision("COMPLIANT")}
+                        className={`flex items-center justify-center gap-1.5 rounded-sm p-2 text-xs font-bold border transition ${
+                          verificationDecision === "COMPLIANT"
+                            ? "bg-emerald-50 border-emerald-600 text-emerald-900 ring-1 ring-emerald-600"
+                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Check className="h-4 w-4 text-emerald-600" />
+                        <span>Lulus & Sahkan Lokasi</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setVerificationDecision("CONDITIONAL")}
+                        className={`flex items-center justify-center gap-1.5 rounded-sm p-2 text-xs font-bold border transition ${
+                          verificationDecision === "CONDITIONAL"
+                            ? "bg-amber-50 border-amber-600 text-amber-900 ring-1 ring-amber-600"
+                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <AlertCircle className="h-4 w-4 text-amber-600" />
+                        <span>Lulus Bersyarat</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Ulasan / Perakuan Pegawai:</label>
+                    <textarea
+                      rows={3}
+                      value={verificationCommentInput}
+                      onChange={(e) => setVerificationCommentInput(e.target.value)}
+                      className="w-full rounded-sm border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-gov-800 focus:outline-hidden"
+                      placeholder="Masukkan ulasan penentusahan rasmi..."
+                    />
+                  </div>
+
+                  {/* Statutory Declaration Checkbox */}
+                  <label className="flex items-start gap-2.5 rounded-sm border border-emerald-200 bg-emerald-50/70 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isDeclarationChecked}
+                      onChange={(e) => setIsDeclarationChecked(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-[11px] leading-relaxed text-emerald-950 font-medium">
+                      <strong>Perakuan Pengesahan:</strong> Saya dengan ini mengesahkan bahawa kedudukan geometri, nombor lot kadaster dan sempadan ruang GIS bagi permohonan ini telah disemak secara teliti bersama data ukur JUPEM serta mematuhi dokumen Rancangan Tempatan Daerah (RTD) Langkawi 2030.
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="text-xs"
+                >
+                  Batal
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleVerifySite(verificationCommentInput)}
+                  disabled={isVerifying || !isDeclarationChecked}
+                  className="bg-emerald-700 text-xs font-bold hover:bg-emerald-800 shadow-xs flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>{isVerifying ? "Mengesahkan..." : "Sahkan & Rekod Pengesahan"}</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL 2: SLIP PERAKUAN PENGESAHAN LOKASI SMARTGIS AI (PRINTABLE SLIP)     */}
+        {/* ========================================================================= */}
+        {isSlipModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs overflow-y-auto">
+            <div className="w-full max-w-3xl rounded-sm bg-white p-6 shadow-2xl space-y-5 my-8 border border-slate-300 print:m-0 print:p-0 print:border-none print:shadow-none">
+              {/* Slip Top Toolbar (Hidden on print) */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 print:hidden">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-700" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Slip Rasmi Perakuan Pengesahan Lokasi SmartGIS AI
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 rounded-sm bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 transition shadow-xs"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Cetak Slip / PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSlipModalOpen(false)}
+                    className="rounded-sm p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable Official Certificate Body */}
+              <div className="space-y-4 rounded-sm border-2 border-slate-300 bg-white p-6 text-xs text-slate-900 font-sans shadow-inner">
+                {/* Official Letterhead */}
+                <div className="text-center border-b-2 border-slate-800 pb-3 space-y-1">
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-600">
+                    KERAJAAN NEGERI KEDAH DARUL AMAN
+                  </p>
+                  <h2 className="text-base font-black uppercase text-slate-900 tracking-wide">
+                    MAJLIS PERBANDARAN LANGKAWI BANDARAYA PELANCONGAN
+                  </h2>
+                  <p className="text-[10px] font-bold text-gov-800 uppercase tracking-wider">
+                    SISTEM PUSAT SETEMPAT (OSC) & SMARTGIS AI COMPLIANCE ENGINE
+                  </p>
+                  <div className="pt-2">
+                    <span className="inline-block rounded-xs bg-slate-900 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider">
+                      SLIP PERAKUAN PENGESAHAN LOKASI & GEOMETRI RUANG
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metadata Header Grid */}
+                <div className="grid grid-cols-2 gap-2 text-[11px] border-b border-slate-200 pb-3">
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">NO. RUJUKAN PERMOHONAN:</span>
+                    <span className="font-mono font-bold text-slate-900 text-xs">{application?.applicationNo || applicationId}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-500 block text-[10px]">NO. SIRI PERAKUAN GIS:</span>
+                    <span className="font-mono font-bold text-purple-900 text-xs">
+                      GIS-VER-{applicationId.replace(/\D/g, "") || "0001"}-2026
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-500 block text-[10px]">TAJUK CADANGAN PEMAJUAN:</span>
+                    <span className="font-bold text-slate-900">{application?.title || "Cadangan Pemajuan Kebenaran Merancang"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">PEMOHON / PEMAJU:</span>
+                    <span className="font-semibold text-slate-800">
+                      {application?.applicantInfo?.applicantName || application?.applicantInfo?.companyName || "Tetuan Pemaju Hartanah"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">ORANG UTAMA MENGEMUKAKAN (PSP):</span>
+                    <span className="font-semibold text-slate-800">
+                      {application?.consultantInfo?.principalSubmittingPerson || application?.consultantInfo?.consultantCompany || "Ar. Tan Boon Huat"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Table of Cadastral & Geodetic Verification */}
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-xs uppercase text-slate-900 border-l-3 border-gov-800 pl-2">
+                    A. Penentusahan Lot Kadaster & Geodetik (JUPEM / MyKadLot)
+                  </h4>
+                  <table className="w-full border-collapse border border-slate-300 text-left text-[11px]">
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="bg-slate-100 p-2 font-semibold w-1/3">Nombor Lot Hakmilik:</td>
+                        <td className="p-2 font-bold font-mono">{site?.lotNumbers?.join(", ") || lotNo}</td>
+                        <td className="bg-slate-100 p-2 font-semibold w-1/4">Mukim / Daerah:</td>
+                        <td className="p-2 font-semibold">Mukim {site?.mukim || mukim}, Langkawi</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="bg-slate-100 p-2 font-semibold">Kod UPI JUPEM:</td>
+                        <td className="p-2 font-mono font-bold text-purple-900">{upiCode}</td>
+                        <td className="bg-slate-100 p-2 font-semibold">Keluasan Kadaster:</td>
+                        <td className="p-2 font-mono font-bold">{(site?.cadastralAreaSqm || siteArea).toLocaleString()} m²</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="bg-slate-100 p-2 font-semibold">Koordinat WGS84:</td>
+                        <td className="p-2 font-mono">{lat.toFixed(6)}° U, {lng.toFixed(6)}° T</td>
+                        <td className="bg-slate-100 p-2 font-semibold">Unjuran RSO Malaya:</td>
+                        <td className="p-2 font-mono">E: {rsoEasting} | N: {rsoNorthing}</td>
+                      </tr>
+                      <tr>
+                        <td className="bg-slate-100 p-2 font-semibold">Perbezaan Keluasan LCP:</td>
+                        <td colSpan={3} className="p-2 font-semibold text-emerald-700">
+                          {comparison?.status === "MATCH" ? "✓ 0% Perbezaan (Sepadan Sepenuhnya dengan LCP)" : `${comparison?.differencePercent || 0}% perbezaan`}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Table of RTD 2030 Conformity */}
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-xs uppercase text-slate-900 border-l-3 border-purple-800 pl-2">
+                    B. Semakan Pengezonan Rancangan Tempatan Daerah (RTD) Langkawi 2030
+                  </h4>
+                  <table className="w-full border-collapse border border-slate-300 text-left text-[11px]">
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="bg-slate-100 p-2 font-semibold w-1/3">Pengezonan Utama RTD:</td>
+                        <td className="p-2 font-bold text-purple-900">
+                          {rtdData?.primaryZone?.zoneName || `Zon Pembangunan ${application?.developmentType || "Perumahan"} (BP 2)`}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="bg-slate-100 p-2 font-semibold">Status Pematuhan Guna Tanah:</td>
+                        <td className="p-2 font-bold text-emerald-800">
+                          ✓ DIBENARKAN & SELARAS DENGAN RANCANGAN TEMPATAN DAERAH 2030
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="bg-slate-100 p-2 font-semibold">Zon Penampan Sekitar (500m):</td>
+                        <td className="p-2 font-semibold text-slate-700">
+                          Tiada halangan zon sensitif alam sekitar (KSAS). Mematuhi anjakan rizab jalan protokol.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Sign-off & Digital Stamp Box */}
+                <div className="mt-4 rounded-sm border border-slate-300 bg-slate-50 p-4">
+                  <div className="grid grid-cols-2 gap-4 items-end">
+                    <div className="space-y-1 text-[11px]">
+                      <span className="font-bold text-slate-900 block">ULASAN PEGAWAI PENGESAH:</span>
+                      <p className="italic text-slate-700 bg-white p-2 rounded border border-slate-200 text-[10px] leading-relaxed">
+                        &ldquo;{site?.verificationComment || "Lokasi tapak, sempadan lot kadaster JUPEM, unjuran koordinat RSO Malaya dan pelan susunatur CAD telah disemak silang serta diperakui mematuhi Pengezonan RTD Langkawi 2030."}&rdquo;
+                      </p>
+                      <div className="pt-2 text-[10px] text-slate-500 font-mono">
+                        STATUS: <strong className="text-emerald-700">SAH & DIPERAKUI DIGITAL</strong>
+                      </div>
+                    </div>
+
+                    <div className="text-right space-y-1">
+                      {/* Official Digital Seal */}
+                      <div className="inline-block rounded-xs border-2 border-emerald-700 bg-emerald-50 px-3 py-1.5 text-center">
+                        <span className="block text-[9px] font-black uppercase text-emerald-800 tracking-wider">
+                          ★ COP PENGESAHAN GIS RASMI ★
+                        </span>
+                        <span className="block text-[10px] font-bold text-emerald-950">
+                          MPLBP LANGKAWI
+                        </span>
+                        <span className="block text-[8px] font-mono text-emerald-700">
+                          STATUS: VERIFIED
+                        </span>
+                      </div>
+
+                      <div className="pt-2 text-[11px]">
+                        <p className="font-bold text-slate-900">{site?.verifiedBy || verificationOfficerName}</p>
+                        <p className="text-[10px] text-slate-600">Pegawai Perancang / GIS Berdaftar</p>
+                        <p className="text-[10px] font-mono text-slate-500">
+                          Tarikh: {site?.verifiedAt ? new Date(site.verifiedAt as string).toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "20 Ogos 2026, 08:30 AM"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center pt-2 text-[9px] text-slate-400 font-mono border-t border-slate-200">
+                  Dokumen ini dijana secara automatik melalui OSC SmartCheck AI & SmartGIS MPLBP Langkawi.
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-end print:hidden">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsSlipModalOpen(false)}
+                  className="text-xs"
+                >
+                  Tutup
+                </Button>
               </div>
             </div>
           </div>

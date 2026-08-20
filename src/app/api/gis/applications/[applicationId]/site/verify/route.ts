@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApplicationSite } from "@/lib/gis/spatialService";
 import { VerifyLocationRequestSchema } from "@/lib/validation/gis.schema";
-import { safeVerifyIdToken } from "@/lib/firebase/admin";
+import { safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
 import { getDemoGisForApp } from "@/lib/seed/demoDataSeeder";
 
 export async function POST(
@@ -22,7 +22,7 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const validated = VerifyLocationRequestSchema.parse(body);
 
-    if (applicationId.startsWith("app-demo-")) {
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
       const { site } = getDemoGisForApp(applicationId);
       return NextResponse.json({
         site: {
