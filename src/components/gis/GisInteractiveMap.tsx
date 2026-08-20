@@ -503,9 +503,9 @@ export function GisInteractiveMap({
       )}
 
       {/* Interactive Leaflet Map Canvas Area */}
-      <div className="relative w-full h-[580px]" style={{ height: "580px", minHeight: "580px" }}>
+      <div className="relative w-full h-[580px] overflow-hidden rounded-b-sm" style={{ height: "580px", minHeight: "580px" }}>
         {/* Top Right Basemap & Legend Controls */}
-        <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2">
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
           {/* Basemap Switcher */}
           <div className="flex items-center gap-0.5 rounded-lg bg-slate-900/90 p-1 shadow-lg border border-slate-700 text-xs backdrop-blur-md">
             <button
@@ -564,7 +564,7 @@ export function GisInteractiveMap({
         />
 
         {/* Bottom Left In-Map HUD Info Card */}
-        <div className="absolute bottom-3 left-3 z-[1000] max-w-xs sm:max-w-sm rounded-xl bg-slate-900/95 p-3.5 text-xs text-white shadow-2xl backdrop-blur-md border border-gold-400/50 pointer-events-auto">
+        <div className="absolute bottom-3 left-3 z-30 max-w-xs sm:max-w-sm rounded-xl bg-slate-900/95 p-3.5 text-xs text-white shadow-2xl backdrop-blur-md border border-gold-400/50 pointer-events-auto">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 font-extrabold text-gold-300">
               <span>📍 {lotNo}, Mukim {mukim}</span>
@@ -582,7 +582,7 @@ export function GisInteractiveMap({
 
           {/* Bottom Right Floating CAD Legend */}
         {showLegend && (
-          <div className="absolute bottom-3 right-3 z-[1000] max-w-xs rounded-xl bg-slate-900/95 p-3 text-xs text-white shadow-2xl backdrop-blur-md border border-slate-700 pointer-events-auto">
+          <div className="absolute bottom-3 right-3 z-30 max-w-xs rounded-xl bg-slate-900/95 p-3 text-xs text-white shadow-2xl backdrop-blur-md border border-slate-700 pointer-events-auto">
             <div className="flex items-center justify-between pb-2 border-b border-slate-700/80 mb-2">
               <span className="text-[11px] font-extrabold uppercase text-gold-400">
                 Petunjuk Pelan Tatatur (CAD AI)

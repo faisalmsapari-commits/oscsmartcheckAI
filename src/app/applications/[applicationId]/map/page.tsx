@@ -1014,7 +1014,7 @@ export default function ApplicationMapPage() {
 
         {/* Search Lot Modal */}
         {isSearchOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
             <div className="w-full max-w-lg rounded-sm bg-white p-5 shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <h3 className="text-sm font-bold text-slate-900">Carian Lot Kadaster Langkawi</h3>
@@ -1097,7 +1097,7 @@ export default function ApplicationMapPage() {
         {/* MODAL 1: BORANG PENGESAHAN LOKASI OLEH PEGAWAI GIS / PERANCANG           */}
         {/* ========================================================================= */}
         {isVerificationModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-xs overflow-y-auto">
             <div className="w-full max-w-2xl rounded-sm bg-white p-6 shadow-2xl space-y-4 my-8 border border-slate-200">
               {/* Header */}
               <div className="flex items-start justify-between border-b border-slate-200 pb-3">
@@ -1292,7 +1292,7 @@ export default function ApplicationMapPage() {
         {/* MODAL 2: SLIP PERAKUAN PENGESAHAN LOKASI SMARTGIS AI (PRINTABLE SLIP)     */}
         {/* ========================================================================= */}
         {isSlipModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/75 p-4 backdrop-blur-xs overflow-y-auto">
             <div className="w-full max-w-3xl rounded-sm bg-white p-6 shadow-2xl space-y-5 my-8 border border-slate-300 print:m-0 print:p-0 print:border-none print:shadow-none">
               {/* Slip Top Toolbar (Hidden on print) */}
               <div className="flex items-center justify-between border-b border-slate-200 pb-3 print:hidden">
