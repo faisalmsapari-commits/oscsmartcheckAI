@@ -21,6 +21,7 @@ import {
   ArrowRight,
   Filter,
 } from "lucide-react";
+import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
 import { OfficerSlaCredibilityCard } from "@/components/dashboard/OfficerSlaCredibilityCard";
 
 interface DemoAppItem {
@@ -40,14 +41,16 @@ interface DemoAppItem {
 
 export default function DashboardPage() {
   const { user, profile, role, organizationId } = useAuth();
-  const [applications, setApplications] = useState<DemoAppItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [applications, setApplications] = useState<DemoAppItem[]>(
+    DEMO_10_APPLICATIONS as unknown as DemoAppItem[]
+  );
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
 
   const loadApplications = async () => {
     try {
-      setLoading(true);
+      if (applications.length === 0) setLoading(true);
       const token = user ? await user.getIdToken() : "mock-token-for-APPLICANT";
       const res = await fetch("/api/applications", {
         headers: {
@@ -56,7 +59,9 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setApplications(data.applications || []);
+        if (data.applications && data.applications.length > 0) {
+          setApplications(data.applications);
+        }
       }
     } catch (err) {
       console.warn("Failed to load applications:", err);

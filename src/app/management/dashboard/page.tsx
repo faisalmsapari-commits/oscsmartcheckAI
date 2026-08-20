@@ -61,7 +61,7 @@ export default function ManagementDashboardPage() {
   const loadData = async () => {
     if (!user) return;
     try {
-      setLoading(true);
+      if (!dashboardData) setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
 

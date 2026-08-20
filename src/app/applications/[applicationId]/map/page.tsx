@@ -21,6 +21,7 @@ import {
 import { generateApplicationLayoutPlan } from "@/lib/gis/layoutPlanProvider";
 import dynamic from "next/dynamic";
 import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
+import { getDemoGisForApp } from "@/lib/seed/demoDataSeeder";
 import {
   ArrowLeft,
   MapPin,
@@ -38,12 +39,12 @@ import {
 } from "lucide-react";
 
 const GisInteractiveMap = dynamic(
-  () => import("@/components/gis/GisInteractiveMap").then((m) => m.GisInteractiveMap),
+  () => import("@/components/gis/GisInteractiveMap").then((mod) => mod.GisInteractiveMap),
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full w-full items-center justify-center bg-slate-900 text-xs font-semibold text-slate-300">
-        <span className="animate-pulse">Memuatkan Peta GIS Interaktif & Pelan Tatatur...</span>
+      <div className="flex h-[580px] w-full items-center justify-center bg-slate-900 text-xs text-slate-400 font-medium">
+        Memuatkan Paparan Peta Interaktif SmartGIS...
       </div>
     ),
   }
@@ -55,26 +56,31 @@ export default function ApplicationMapPage() {
   const { user, role } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
+  const demoGis = applicationId ? getDemoGisForApp(applicationId) : null;
   const initialLayout = demoApp
     ? generateApplicationLayoutPlan({
         applicationId,
-        lat: demoApp.siteInfo?.location?.latitude || 6.3268,
-        lng: demoApp.siteInfo?.location?.longitude || 99.8432,
-        siteAreaSqm: demoApp.siteInfo?.siteArea?.siteAreaSqm || 20000,
-        lotNo: demoApp.siteInfo?.lots?.[0]?.lotNumber || "Lot 145",
-        mukim: demoApp.siteInfo?.mukim || "Kuah",
+        lat: demoApp.siteInfo?.location?.latitude || demoGis?.site?.latitude || 6.3268,
+        lng: demoApp.siteInfo?.location?.longitude || demoGis?.site?.longitude || 99.8432,
+        siteAreaSqm: demoApp.siteInfo?.siteArea?.siteAreaSqm || demoGis?.site?.cadastralAreaSqm || 20000,
+        lotNo: demoApp.siteInfo?.lots?.[0]?.lotNumber || demoGis?.site?.lotNumbers?.[0] || "Lot 145",
+        mukim: demoApp.siteInfo?.mukim || demoGis?.site?.mukim || "Kuah",
         developmentType: demoApp.developmentType || "HOUSING",
         projectTitle: demoApp.title || "Cadangan Pemajuan",
       })
     : null;
 
   const [application, setApplication] = useState<Application | null>(demoApp);
-  const [site, setSite] = useState<ApplicationSite | null>(null);
-  const [comparison, setComparison] = useState<LcpGisComparisonResult | null>(null);
-  const [rtdData, setRtdData] = useState<{ primaryZone: RtdIntersectionResult | null; zones: RtdIntersectionResult[] } | null>(null);
-  const [bufferData, setBufferData] = useState<SiteBufferAnalysisResult | null>(null);
+  const [site, setSite] = useState<ApplicationSite | null>(demoGis ? (demoGis.site as unknown as ApplicationSite) : null);
+  const [comparison, setComparison] = useState<LcpGisComparisonResult | null>(demoGis ? (demoGis.comparison as unknown as LcpGisComparisonResult) : null);
+  const [rtdData, setRtdData] = useState<{ primaryZone: RtdIntersectionResult | null; zones: RtdIntersectionResult[] } | null>(
+    demoGis ? (demoGis.rtdData as unknown as { primaryZone: RtdIntersectionResult | null; zones: RtdIntersectionResult[] }) : null
+  );
+  const [bufferData, setBufferData] = useState<SiteBufferAnalysisResult | null>(
+    demoGis ? (demoGis.bufferData as unknown as SiteBufferAnalysisResult) : null
+  );
   const [layoutPlan, setLayoutPlan] = useState<ApplicationLayoutPlan | null>(initialLayout);
-  const [loading, setLoading] = useState(!demoApp);
+  const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -115,7 +121,7 @@ export default function ApplicationMapPage() {
   const fetchGisData = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
+      if (!site) setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
 

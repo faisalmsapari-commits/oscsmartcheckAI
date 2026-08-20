@@ -16,20 +16,20 @@ import {
   ALLOWED_DOCUMENT_TYPES,
 } from "@/types/document";
 import { Application } from "@/types/application";
-import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
+import { DEMO_10_APPLICATIONS, getDemoDocumentsForApp } from "@/lib/seed/demoData";
 import {
-  ArrowLeft,
-  UploadCloud,
   FileText,
+  Upload as UploadCloud,
   CheckCircle2,
-  AlertTriangle,
   AlertCircle,
+  AlertTriangle,
   Eye,
-  Download,
-  Loader2,
+  ArrowLeft,
   X,
   ShieldAlert,
   Sparkles,
+  Download,
+  Loader2,
 } from "lucide-react";
 
 export default function ApplicationDocumentsPage() {
@@ -38,10 +38,16 @@ export default function ApplicationDocumentsPage() {
   const { user, role } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
+  const initialDocs = demoApp ? (getDemoDocumentsForApp(applicationId) as unknown as DocumentMetadata[]) : [];
   const [application, setApplication] = useState<Application | null>(demoApp);
-  const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
-  const [completeness, setCompleteness] = useState<DocumentCompletenessResult | null>(null);
-  const [loading, setLoading] = useState(!demoApp);
+  const [documents, setDocuments] = useState<DocumentMetadata[]>(initialDocs);
+  const [completeness, setCompleteness] = useState<DocumentCompletenessResult | null>({
+    complete: true,
+    missingDocuments: [],
+    uploadedDocuments: initialDocs.map((d) => d.documentType),
+    totalUploaded: initialDocs.length,
+  });
+  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processingLcp, setProcessingLcp] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>("LCP");
@@ -65,7 +71,7 @@ export default function ApplicationDocumentsPage() {
   const fetchData = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
+      if (documents.length === 0) setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
 

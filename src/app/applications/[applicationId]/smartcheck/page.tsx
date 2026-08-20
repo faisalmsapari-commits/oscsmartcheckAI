@@ -22,6 +22,7 @@ import {
   OfficerReviewCompleteness,
 } from "@/types/dashboard";
 import { DEMO_10_APPLICATIONS, getDemoSmartCheckForApp } from "@/lib/seed/demoData";
+import { getDemoIssuesForApp } from "@/lib/seed/demoDataSeeder";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -48,11 +49,12 @@ export default function SmartCheckMatrixPage() {
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
   const initialResults = applicationId ? (getDemoSmartCheckForApp(applicationId) as unknown as RuleEvaluation[]) : [];
+  const initialIssues = applicationId ? (getDemoIssuesForApp(applicationId) as unknown as SmartCheckIssue[]) : [];
 
   const [application, setApplication] = useState<Application | null>(demoApp);
   const [smartCheck, setSmartCheck] = useState<SmartCheckRecord | null>(null);
   const [results, setResults] = useState<RuleEvaluation[]>(initialResults);
-  const [issues, setIssues] = useState<SmartCheckIssue[]>([]);
+  const [issues, setIssues] = useState<SmartCheckIssue[]>(initialIssues);
   const [freshness, setFreshness] = useState<SmartCheckFreshnessResult | null>(null);
   const [completeness, setCompleteness] = useState<OfficerReviewCompleteness | null>(null);
 

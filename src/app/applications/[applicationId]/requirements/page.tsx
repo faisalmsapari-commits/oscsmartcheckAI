@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { SmartCheckIssue } from "@/types/issues";
+import { getDemoIssuesForApp } from "@/lib/seed/demoDataSeeder";
 import {
   ArrowLeft,
   AlertCircle,
@@ -22,21 +23,23 @@ export default function ApplicantRequirementsPage() {
   const applicationId = params?.applicationId as string;
   const { user } = useAuth();
 
-  const [issues, setIssues] = useState<SmartCheckIssue[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialIssues = applicationId ? (getDemoIssuesForApp(applicationId) as unknown as SmartCheckIssue[]) : [];
+  const [issues, setIssues] = useState<SmartCheckIssue[]>(initialIssues);
+  const [loading, setLoading] = useState(false);
 
   const fetchPublishedRequirements = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
+      if (issues.length === 0) setLoading(true);
       const token = await user.getIdToken();
       const res = await fetch(`/api/applications/${applicationId}/issues`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        // API ensures only APPLICANT_VISIBLE issues are returned for APPLICANT role
-        setIssues(data.issues || []);
+        if (data.issues && data.issues.length > 0) {
+          setIssues(data.issues);
+        }
       }
     } catch (err: unknown) {
       console.warn("Error fetching requirements:", err);

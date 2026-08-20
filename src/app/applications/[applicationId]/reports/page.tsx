@@ -16,6 +16,8 @@ import {
   ReportFreshnessResult,
   ReportIntegrityResult,
 } from "@/types/reports";
+import { Application } from "@/types/application";
+import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
 import {
   ArrowLeft,
   FileText,
@@ -34,11 +36,96 @@ export default function ReportsPage() {
   const applicationId = params?.applicationId as string;
   const { user, role } = useAuth();
 
-  const [reports, setReports] = useState<ReportRecord[]>([]);
-  const [readiness, setReadiness] = useState<ReportReadinessResult | null>(null);
+  const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
+  const initialReports: ReportRecord[] = demoApp
+    ? [
+        {
+          reportId: `rep-${applicationId}-01`,
+          applicationId,
+          reportType: "SMARTCHECK_INTERNAL",
+          reportVersion: 1,
+          status: "GENERATED",
+          visibility: "INTERNAL",
+          classification: "INTERNAL",
+          metadata: {
+            reportId: `rep-${applicationId}-01`,
+            reportType: "SMARTCHECK_INTERNAL",
+            reportVersion: 1,
+            applicationId,
+            applicationNo: demoApp.applicationNo,
+            smartCheckId: `sc-${applicationId}-latest`,
+            generatedAt: demoApp.updatedAt,
+            generatedBy: "Pegawai OSC SmartCheck",
+            systemVersion: "v1.0.0",
+            lcpVersion: demoApp.currentVersion,
+            siteVersion: 1,
+            engineVersion: "v1.0",
+            rulesetVersion: "v1.0",
+            gisDatasetVersion: "v1.0",
+            sourceFingerprint: "sha256-verified-fingerprint",
+          },
+          pdfPath: `/reports/${applicationId}/internal-v1.pdf`,
+          pdfFilename: `Laporan_SmartCheck_Dalaman_${demoApp.applicationNo.replace(/\//g, "_")}.pdf`,
+          sha256Checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          fileSizeBytes: 245800,
+          pageCount: 6,
+          generatedBy: "demo-officer-uid",
+          generatedAt: demoApp.updatedAt,
+          createdAt: demoApp.createdAt,
+        } as unknown as ReportRecord,
+        {
+          reportId: `rep-${applicationId}-02`,
+          applicationId,
+          reportType: "SMARTCHECK_APPLICANT",
+          reportVersion: 1,
+          status: "GENERATED",
+          visibility: "APPLICANT_VISIBLE",
+          classification: "APPLICANT",
+          metadata: {
+            reportId: `rep-${applicationId}-02`,
+            reportType: "SMARTCHECK_APPLICANT",
+            reportVersion: 1,
+            applicationId,
+            applicationNo: demoApp.applicationNo,
+            smartCheckId: `sc-${applicationId}-latest`,
+            generatedAt: demoApp.updatedAt,
+            generatedBy: "Pegawai OSC SmartCheck",
+            systemVersion: "v1.0.0",
+            lcpVersion: demoApp.currentVersion,
+            siteVersion: 1,
+            engineVersion: "v1.0",
+            rulesetVersion: "v1.0",
+            gisDatasetVersion: "v1.0",
+            sourceFingerprint: "sha256-verified-fingerprint",
+          },
+          pdfPath: `/reports/${applicationId}/applicant-v1.pdf`,
+          pdfFilename: `Laporan_PraSemakan_Pemohon_${demoApp.applicationNo.replace(/\//g, "_")}.pdf`,
+          sha256Checksum: "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
+          fileSizeBytes: 189400,
+          pageCount: 4,
+          generatedBy: "demo-officer-uid",
+          generatedAt: demoApp.updatedAt,
+          publishedAt: demoApp.updatedAt,
+          publishedBy: "demo-officer-uid",
+          createdAt: demoApp.createdAt,
+        } as unknown as ReportRecord,
+      ]
+    : [];
+
+  const [reports, setReports] = useState<ReportRecord[]>(initialReports);
+  const [readiness, setReadiness] = useState<ReportReadinessResult | null>({
+    ready: true,
+    smartCheckReady: true,
+    verifiedCommentReady: true,
+    siteReady: true,
+    sourceReady: true,
+    publicationReady: true,
+    blockingIssues: [],
+    warnings: [],
+  });
   const [freshnessMap, setFreshnessMap] = useState<Record<string, ReportFreshnessResult>>({});
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -57,7 +144,7 @@ export default function ReportsPage() {
   const loadData = async () => {
     if (!user || !applicationId) return;
     try {
-      setLoading(true);
+      if (reports.length === 0) setLoading(true);
       setErrorMessage(null);
       const token = await user.getIdToken();
 
