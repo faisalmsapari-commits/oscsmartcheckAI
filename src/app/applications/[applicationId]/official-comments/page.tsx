@@ -12,26 +12,30 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { VerifiedComment } from "@/types/comments";
 import { ArrowLeft, CheckCircle2, FileText } from "lucide-react";
 
+import { getDemoVerifiedCommentsForApp } from "@/lib/seed/demoData";
+
 export default function OfficialCommentsPage() {
   const params = useParams();
   const applicationId = params?.applicationId as string;
   const { user } = useAuth();
 
-  const [comments, setComments] = useState<VerifiedComment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialComments = applicationId ? getDemoVerifiedCommentsForApp(applicationId) : [];
+  const [comments, setComments] = useState<VerifiedComment[]>(initialComments);
+  const [loading, setLoading] = useState(initialComments.length === 0);
 
   useEffect(() => {
     async function loadPublicComments() {
       if (!user || !applicationId) return;
       try {
-        setLoading(true);
         const token = await user.getIdToken();
         const res = await fetch(`/api/applications/${applicationId}/comments/public`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const data = await res.json();
-          setComments(data.comments || []);
+          if (data.comments && data.comments.length > 0) {
+            setComments(data.comments);
+          }
         }
       } catch (err: unknown) {
         console.warn("Failed to load comments:", err);

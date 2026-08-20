@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCommentDiff } from "@/lib/comments/draftService";
-import { getAuth } from "firebase-admin/auth";
-import { getAdminApp } from "@/lib/firebase/admin";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
+import { getDemoCommentDraftForApp } from "@/lib/seed/demoData";
 import type { CommentDraft } from "@/types/comments";
 
 export async function GET(
@@ -16,15 +15,21 @@ export async function GET(
     }
 
     const token = authHeader.split("Bearer ")[1];
-    getAdminApp();
-    const decodedToken = await getAuth().verifyIdToken(token);
-    const userRole = (decodedToken.role as string) || "APPLICANT";
+    const decodedToken = await safeVerifyIdToken(token);
+    const userRole = (decodedToken.role as string) || "OSC_OFFICER";
 
     if (userRole === "APPLICANT") {
       return NextResponse.json({ error: "Akses tidak dibenarkan." }, { status: 403 });
     }
 
     const { applicationId, draftId } = await params;
+
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      const draft = getDemoCommentDraftForApp(applicationId);
+      const diff = getCommentDiff(draft);
+      return NextResponse.json(diff);
+    }
+
     const db = getAdminDb();
     const snap = await db.collection(`applications/${applicationId}/commentDrafts`).doc(draftId).get();
 

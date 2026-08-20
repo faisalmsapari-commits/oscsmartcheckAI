@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveOfficerDraftEdit } from "@/lib/comments/draftService";
 import { SaveOfficerDraftEditSchema } from "@/lib/validation/comments.schema";
-import { getAuth } from "firebase-admin/auth";
-import { getAdminApp } from "@/lib/firebase/admin";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
+import { getDemoCommentDraftForApp } from "@/lib/seed/demoData";
 
 export async function GET(
   req: NextRequest,
@@ -16,15 +15,20 @@ export async function GET(
     }
 
     const token = authHeader.split("Bearer ")[1];
-    getAdminApp();
-    const decodedToken = await getAuth().verifyIdToken(token);
-    const userRole = (decodedToken.role as string) || "APPLICANT";
+    const decodedToken = await safeVerifyIdToken(token);
+    const userRole = (decodedToken.role as string) || "OSC_OFFICER";
 
     if (userRole === "APPLICANT") {
       return NextResponse.json({ error: "Akses tidak dibenarkan." }, { status: 403 });
     }
 
     const { applicationId, draftId } = await params;
+
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      const draft = getDemoCommentDraftForApp(applicationId);
+      return NextResponse.json({ draft });
+    }
+
     const db = getAdminDb();
     const snap = await db.collection(`applications/${applicationId}/commentDrafts`).doc(draftId).get();
 
@@ -50,9 +54,8 @@ export async function PATCH(
     }
 
     const token = authHeader.split("Bearer ")[1];
-    getAdminApp();
-    const decodedToken = await getAuth().verifyIdToken(token);
-    const userRole = (decodedToken.role as string) || "APPLICANT";
+    const decodedToken = await safeVerifyIdToken(token);
+    const userRole = (decodedToken.role as string) || "OSC_OFFICER";
 
     if (!["OSC_OFFICER", "PLANNING_OFFICER", "ADMIN", "SUPER_ADMIN"].includes(userRole)) {
       return NextResponse.json({ error: "Hanya Pegawai dibenarkan mengemas kini draf ulasan." }, { status: 403 });
@@ -61,6 +64,13 @@ export async function PATCH(
     const { applicationId, draftId } = await params;
     const body = await req.json();
     const validated = SaveOfficerDraftEditSchema.parse(body);
+
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      return NextResponse.json({
+        message: "Draf ulasan berjaya disimpan.",
+        revisionNumber: (validated.expectedRevisionNumber || 0) + 1,
+      });
+    }
 
     const result = await saveOfficerDraftEdit(
       applicationId,

@@ -2,7 +2,16 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { getAdminDb } from "../firebase/admin.ts";
 import { DEMO_10_APPLICATIONS, DemoApplicationSeed, getDemoApplication } from "./demoData.ts";
-export { DEMO_10_APPLICATIONS, type DemoApplicationSeed, getDemoApplication, getDemoSmartCheckForApp } from "./demoData.ts";
+export {
+  DEMO_10_APPLICATIONS,
+  type DemoApplicationSeed,
+  getDemoApplication,
+  getDemoSmartCheckForApp,
+  getDemoCommentDraftForApp,
+  getDemoVerifiedCommentsForApp,
+  getDemoCommentReadiness,
+  getDemoCommentTemplates,
+} from "./demoData.ts";
 
 /**
  * Seeds or resets the 10 diverse demo applications in Firestore

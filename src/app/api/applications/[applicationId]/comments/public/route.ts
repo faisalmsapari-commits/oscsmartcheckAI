@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPublishedComments } from "@/lib/comments/verificationService";
-import { getAuth } from "firebase-admin/auth";
-import { getAdminApp } from "@/lib/firebase/admin";
+import { safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
+import { getDemoVerifiedCommentsForApp } from "@/lib/seed/demoData";
 
 export async function GET(
   req: NextRequest,
@@ -14,12 +14,15 @@ export async function GET(
     }
 
     const token = authHeader.split("Bearer ")[1];
-    getAdminApp();
-    await getAuth().verifyIdToken(token);
+    await safeVerifyIdToken(token);
 
     const { applicationId } = await params;
-    const comments = await getPublishedComments(applicationId);
 
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      return NextResponse.json({ comments: getDemoVerifiedCommentsForApp(applicationId) });
+    }
+
+    const comments = await getPublishedComments(applicationId);
     return NextResponse.json({ comments });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Ralat memuatkan ulasan awam";

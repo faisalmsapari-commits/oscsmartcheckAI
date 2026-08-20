@@ -1,3 +1,10 @@
+import type {
+  CommentDraft,
+  VerifiedComment,
+  CommentReadinessResult,
+  StandardPhraseTemplate,
+} from "@/types/comments";
+
 export interface DemoApplicationSeed {
   id: string;
   applicationNo: string;
@@ -1047,6 +1054,231 @@ export function getDemoFactsForApp(id: string) {
       ],
       createdAt: app.createdAt,
       updatedAt: app.updatedAt,
+    },
+  ];
+}
+
+export function getDemoCommentDraftForApp(id: string): CommentDraft {
+  const app = getDemoApplication(id);
+
+  const generatedText = `# ULASAN TEKNIKAL KEBENARAN MERANCANG (DRAF PEGAWAI OSC)
+
+**No. Permohonan:** ${app.applicationNo}
+**Tajuk Permohonan:** ${app.title}
+**Pemohon / Pemaju:** ${app.applicantName}
+**Orang Utama Mengemukakan (PSP):** ${app.consultantName}
+**Lokasi Tapak:** ${app.lotNo}, Mukim ${app.mukim}, Daerah Langkawi, Kedah
+**Keluasan Tapak:** ${app.siteAreaSqm.toLocaleString()} m²
+**Kategori Pembangunan:** ${app.developmentCategory} (${app.developmentType})
+**Tarikh Penjanaan AI:** ${new Date(app.updatedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" })}
+
+---
+
+### 1. RINGKASAN EKSEKUTIF & KONTEKS PERANCANGAN
+Permohonan ini melibatkan cadangan pemajuan kebenaran merancang (KM) bagi ${app.title.toLowerCase()} di atas ${app.lotNo}, Mukim ${app.mukim}. Penilaian pra-semakan komprehensif berbantukan enjin AI SmartCheck dan semakan silang geospatial SmartGIS mendapati bahawa cadangan ini secara umumnya adalah **SELARAS DENGAN RANCANGAN TEMPATAN DAERAH (RTD) LANGKAWI 2030** serta mematuhi piawaian perancangan teknikal utama dengan skor pematuhan ${app.complianceScore}%.
+
+### 2. KEPUTUSAN SEMAKAN PARAMETER TEKNIKAL & SPATIAL
+1. **Pengezonan Guna Tanah (RTD 2030):**
+   - Tapak cadangan terletak di dalam Zon Pembangunan ${app.developmentType} (BP 2) yang membenarkan aktiviti pemajuan yang dicadangkan.
+2. **Kepadatan & Intensiti Pembangunan:**
+   - Nisbah Plot (Plot Ratio) dan kepadatan unit yang dikemukakan dalam LCP adalah mematuhi had siling yang ditetapkan dalam garis panduan perancangan.
+3. **Kawasan Lapang & Landskap (Open Space):**
+   - Penyediaan kawasan lapang berfungsi melebihi had minimum statutori 10.0% daripada jumlah keluasan skim pemajuan.
+4. **Penyediaan Tempat Letak Kereta & Motosikal:**
+   - Jumlah petak letak kereta (termasuk petak khas OKU) dan motosikal yang diperuntukkan menepati formula perkiraan MPM/MPLBP.
+5. **Anjakan Bangunan (Building Setback):**
+   - Garisan anjakan bangunan hadapan, sisi, dan belakang mematuhi kehendak zon rizab jalan dan bangunan bersebelahan.
+
+### 3. ISU TEKNIKAL & PERKARA YANG MEMERLUKAN TINDAKAN PEMOHON
+1. **Pelan Pengurusan Air Larian Hujan & Kolam Takungan (OSD):**
+   - Pemohon/PSP perlu mengemukakan perincian kapasiti sistem On-Site Detention (OSD) serta perkiraan hidrologi selaras dengan Manual Saliran Mesra Alam (MSMA Edisi Ke-2).
+2. **Kelegaan Akses Kenderaan Bomba & Penyelamat:**
+   - Memastikan kelegaan kelebaran laluan perkhidmatan kecemasan minimum 6.0 meter dengan jejari pusingan (*turning radius*) yang mencukupi untuk jentera Jabatan Bomba dan Penyelamat Malaysia (JBPM).
+
+### 4. SYARAT-SYARAT KEBENARAN MERANCANG (CADANGAN)
+1. Pemajuan hendaklah dilaksanakan dengan mematuhi sepenuhnya Pelan Susunatur CAD Georeferenced (DWG/KM/2026/000003-L01) yang diluluskan.
+2. Membina dan menyelenggara laluan pejalan kaki mesra OKU selebar minimum 1.5 meter di sepanjang perimeter rezab jalan hadapan tapak.
+3. Mengemukakan kelulusan rasmi daripada agensi teknikal luaran (JPS, JKR, IWK, TNB, SADA, JBPM) sebelum permohonan Pelan Bangunan dikemukakan ke OSC.
+
+---
+*Draf ini dijana secara automatik oleh OSC SmartCheck AI Assistant (Model Gemini 1.5 Pro). Pegawai Penilai OSC boleh menyunting dan menambah ulasan sebelum pengesahan muktamad.*`;
+
+  return {
+    id: `draft-${app.id}-01`,
+    draftId: `draft-${app.id}-01`,
+    applicationId: app.id,
+    smartCheckId: `sc-${app.id}-latest`,
+    draftType: "OSC_FULL_DRAFT",
+    draftStyle: "STANDARD",
+    status: "AI_DRAFT",
+    version: 1,
+    revisionNumber: 0,
+    sourceFingerprint: `fp-${app.id}-v1`,
+    sourceVersions: {
+      lcpVersion: app.currentVersion,
+      siteVersion: 1,
+      smartCheckId: `sc-${app.id}-latest`,
+      engineVersion: "OSC_RULE_ENGINE_V1.0",
+      promptVersion: "PROMPT_V1.0",
+    },
+    aiModel: "Gemini 1.5 Pro (OSC Technical Reasoning Engine)",
+    promptVersion: "PROMPT_V1.0",
+    generatedSections: {
+      executiveSummary: `Permohonan bagi ${app.title} di atas ${app.lotNo}, Mukim ${app.mukim} mematuhi RTD Langkawi 2030 dengan skor pematuhan ${app.complianceScore}%.`,
+      planningContext: `Tapak cadangan seluas ${app.siteAreaSqm.toLocaleString()} m² terletak di dalam zon guna tanah ${app.developmentCategory}.`,
+      categoryComments: [
+        {
+          category: "LAND_USE_ZONING",
+          summary: "Guna tanah dan zon RTD 2030 mematuhi sepenuhnya syarat perancangan.",
+          findings: ["Guna tanah selaras dengan RTD Langkawi 2030 (BP2 Kuah)."],
+          actionRequired: null,
+          evidenceRefs: [`doc-${app.id}-lcp p.3`, "RTD Langkawi 2030"],
+        },
+        {
+          category: "INTENSITY_GFA",
+          summary: "Nisbah plot dan kepadatan mematuhi had maksimum.",
+          findings: ["Plot ratio mematuhi had kawasan perbandaran."],
+          actionRequired: null,
+          evidenceRefs: [`doc-${app.id}-lcp p.7`],
+        },
+        {
+          category: "PARKING",
+          summary: "Peruntukan tempat letak kereta dan OKU mencukupi.",
+          findings: ["Penyediaan petak TLK melepasi formula minimum Majlis."],
+          actionRequired: null,
+          evidenceRefs: [`doc-${app.id}-lcp p.13`],
+        },
+        {
+          category: "DRAINAGE",
+          summary: "Perlu perincian kapasiti kolam takungan (OSD).",
+          findings: ["Perlu semakan hidrologi MSMA 2."],
+          actionRequired: "Kemukakan perkiraan OSD JPS.",
+          evidenceRefs: [`doc-${app.id}-lcp p.16`],
+        },
+      ],
+      issuesRequiringAction: [
+        {
+          ruleCode: "DRAIN-001",
+          description: "Pengiraan kapasiti On-Site Detention (OSD) perlu diselaraskan dengan garis panduan JPS MSMA 2.",
+          recommendedAction: "Kemukakan nota perkiraan hidrologi dan pelan skematik OSD.",
+        },
+      ],
+      officerJudgementItems: [
+        {
+          ruleCode: "SETBACK-002",
+          finding: "Anjakan sisi bangunan adalah 6.0 meter.",
+          officerAssessment: "Bersetuju kerana melebihi syarat minimum 3.0 meter.",
+          implication: "Memenuhi keperluan penampan dan keselamatan kebakaran.",
+        },
+      ],
+      recommendedApplicantActions: [
+        "Kemukakan pelan perincian sistem saliran OSD yang diperakukan oleh Jurutera Bertauliah (PE).",
+        "Sediakan laluan pejalan kaki mesra OKU selebar minimum 1.5 meter di sepanjang perimeter hadapan.",
+      ],
+      conclusionDraft: "Secara keseluruhannya, cadangan pembangunan ini adalah teratur dari segi perancangan dan disyorkan untuk pertimbangan kelulusan bersyarat oleh Jawatankuasa OSC.",
+      sourceReferences: [
+        { type: "RULE", ruleCode: "RTD-2030-BP2", description: "Rancangan Tempatan Daerah Langkawi 2030" },
+        { type: "LCP", document: `doc-${app.id}-lcp`, page: 5, description: "Laporan Cadangan Pemajuan" },
+      ],
+      warnings: [],
+    },
+    aiGeneratedText: generatedText,
+    officerEditedText: generatedText,
+    createdBy: "OSC_AI_DRAFT_ASSISTANT",
+    createdAt: app.createdAt,
+    updatedAt: app.updatedAt,
+    lastEditedBy: "demo-officer-uid",
+  };
+}
+
+export function getDemoVerifiedCommentsForApp(id: string): VerifiedComment[] {
+  const draft = getDemoCommentDraftForApp(id);
+  const app = getDemoApplication(id);
+
+  return [
+    {
+      id: `vc-${app.id}-01`,
+      commentId: `vc-${app.id}-01`,
+      applicationId: app.id,
+      smartCheckId: `sc-${app.id}-latest`,
+      draftId: draft.draftId,
+      version: 1,
+      status: "VERIFIED",
+      visibility: "APPLICANT_VISIBLE",
+      finalText: draft.officerEditedText || draft.aiGeneratedText,
+      structuredSections: draft.generatedSections,
+      sourceSnapshot: {
+        lcpVersion: app.currentVersion,
+        siteVersion: 1,
+        smartCheckId: `sc-${app.id}-latest`,
+        ruleSetVersions: ["RULESET_V1.0"],
+        gisDatasetVersions: ["GIS_RTD_2030_V1"],
+        engineVersion: "OSC_RULE_ENGINE_V1.0",
+        promptVersion: "PROMPT_V1.0",
+        sourceFingerprint: `fp-${app.id}-v1`,
+      },
+      checksum: `sha256-verified-comment-${app.id}-001`,
+      verifiedBy: "Sr. Ahmad Fauzi (Pegawai Perancang / GIS)",
+      verifiedAt: app.updatedAt,
+      publishedBy: "Sr. Ahmad Fauzi (Pegawai Perancang / GIS)",
+      publishedAt: app.updatedAt,
+      createdAt: app.createdAt,
+    },
+  ];
+}
+
+export function getDemoCommentReadiness(): CommentReadinessResult {
+  return {
+    ready: true,
+    smartCheckReady: true,
+    officerReviewReady: true,
+    sourceReady: true,
+    unresolvedCriticalErrors: [],
+    warnings: [],
+    blockingIssues: [],
+  };
+}
+
+export function getDemoCommentTemplates(): StandardPhraseTemplate[] {
+  return [
+    {
+      id: "tpl-001",
+      templateId: "tpl-001",
+      name: "Kelulusan Bersyarat - Saliran OSD JPS",
+      category: "DRAINAGE",
+      text: "Pemohon/PSP dikehendaki mengemukakan pelan perincian sistem On-Site Detention (OSD) serta perkiraan hidrologi yang diperakukan oleh Jurutera Bertauliah selaras dengan Manual Saliran Mesra Alam (MSMA Edisi Ke-2) kepada JPS Daerah Langkawi.",
+      isLocked: false,
+      status: "ACTIVE",
+      version: 1,
+      approvedBy: "demo-admin-uid",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+    {
+      id: "tpl-002",
+      templateId: "tpl-002",
+      name: "Penyediaan Laluan Pejalan Kaki & Kemudahan OKU",
+      category: "ACCESS",
+      text: "Penyediaan laluan pejalan kaki mesra OKU selebar minimum 1.5 meter yang bersambung dengan rezab jalan utama dan dilengkapi blok penunjuk arah (tactile paving) hendaklah disediakan selaras dengan Garis Panduan Reka Bentuk Sejagat (Universal Design).",
+      isLocked: false,
+      status: "ACTIVE",
+      version: 1,
+      approvedBy: "demo-admin-uid",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+    {
+      id: "tpl-003",
+      templateId: "tpl-003",
+      name: "Pematuhan Garisan Anjakan Hadapan Jalan Protokol",
+      category: "SETBACK",
+      text: "Semua struktur bangunan kekal hendaklah mematuhi garisan anjakan hadapan minimum 12.0 meter daripada garisan rezab jalan protokol 20.0 meter (66 kaki).",
+      isLocked: false,
+      status: "ACTIVE",
+      version: 1,
+      approvedBy: "demo-admin-uid",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
     },
   ];
 }

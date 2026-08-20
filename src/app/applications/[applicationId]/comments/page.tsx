@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { Application } from "@/types/application";
-import { DEMO_10_APPLICATIONS } from "@/lib/seed/demoData";
+import {
+  DEMO_10_APPLICATIONS,
+  getDemoCommentDraftForApp,
+  getDemoVerifiedCommentsForApp,
+  getDemoCommentReadiness,
+  getDemoCommentTemplates,
+} from "@/lib/seed/demoData";
 import {
   CommentDraft,
   VerifiedComment,
@@ -37,13 +43,20 @@ export default function CommentWorkspacePage() {
   const { user } = useAuth();
 
   const demoApp = (DEMO_10_APPLICATIONS as unknown as Application[]).find((a) => a.id === applicationId) || null;
-  const [application, setApplication] = useState<Application | null>(demoApp);
-  const [draft, setDraft] = useState<CommentDraft | null>(null);
-  const [verifiedComments, setVerifiedComments] = useState<VerifiedComment[]>([]);
-  const [readiness, setReadiness] = useState<CommentReadinessResult | null>(null);
-  const [templates, setTemplates] = useState<StandardPhraseTemplate[]>([]);
+  const initialDraft = demoApp ? getDemoCommentDraftForApp(applicationId) : null;
+  const initialVerified = demoApp ? getDemoVerifiedCommentsForApp(applicationId) : [];
+  const initialReadiness = demoApp ? getDemoCommentReadiness() : null;
+  const initialTemplates = getDemoCommentTemplates();
 
-  const [editorText, setEditorText] = useState("");
+  const [application, setApplication] = useState<Application | null>(demoApp);
+  const [draft, setDraft] = useState<CommentDraft | null>(initialDraft);
+  const [verifiedComments, setVerifiedComments] = useState<VerifiedComment[]>(initialVerified);
+  const [readiness, setReadiness] = useState<CommentReadinessResult | null>(initialReadiness);
+  const [templates, setTemplates] = useState<StandardPhraseTemplate[]>(initialTemplates);
+
+  const [editorText, setEditorText] = useState(
+    initialDraft?.officerEditedText || initialDraft?.aiGeneratedText || ""
+  );
   const [loading, setLoading] = useState(!demoApp);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

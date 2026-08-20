@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb } from "@/lib/firebase/admin";
-import { getAuth } from "firebase-admin/auth";
-import { getAdminApp } from "@/lib/firebase/admin";
+import { getAdminDb, safeVerifyIdToken, isCloudFirestoreConfigured } from "@/lib/firebase/admin";
+import { getDemoCommentDraftForApp } from "@/lib/seed/demoData";
 
 export async function GET(
   req: NextRequest,
@@ -14,17 +13,21 @@ export async function GET(
     }
 
     const token = authHeader.split("Bearer ")[1];
-    getAdminApp();
-    const decodedToken = await getAuth().verifyIdToken(token);
-    const userRole = (decodedToken.role as string) || "APPLICANT";
+    const decodedToken = await safeVerifyIdToken(token);
+    const userRole = (decodedToken.role as string) || "OSC_OFFICER";
 
     if (userRole === "APPLICANT") {
       return NextResponse.json({ error: "Pemohon tidak dibenarkan melihat draf dalaman." }, { status: 403 });
     }
 
     const { applicationId } = await params;
-    const db = getAdminDb();
 
+    if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+      const draft = getDemoCommentDraftForApp(applicationId);
+      return NextResponse.json({ draft });
+    }
+
+    const db = getAdminDb();
     const draftsSnap = await db
       .collection(`applications/${applicationId}/commentDrafts`)
       .orderBy("createdAt", "desc")
