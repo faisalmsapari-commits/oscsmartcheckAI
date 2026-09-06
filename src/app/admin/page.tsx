@@ -285,6 +285,29 @@ export default function AdminPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {/* 0. Pengurusan Pengguna Console */}
+                <Link href="/admin/users" className="group block">
+                  <div className="rounded-xl border border-indigo-300 bg-gradient-to-br from-indigo-900 to-slate-900 p-4 text-white shadow-md transition group-hover:border-indigo-200 group-hover:shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-400/40">
+                        👥
+                      </div>
+                      <span className="rounded-full bg-indigo-400/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-400/30">
+                        PENTADBIRAN RBAC
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold text-white group-hover:text-indigo-300 transition">
+                      Pengurusan Pengguna & Peranan
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-300 line-clamp-2">
+                      Pengurusan akaun pegawai & pemohon, penukaran peranan (Custom Claims), status aktif/nyahaktif dan pendaftaran pengguna baharu.
+                    </p>
+                    <div className="mt-3 text-[11px] font-bold text-indigo-300 flex items-center gap-1">
+                      <span>Konsol Pengguna ↗</span>
+                    </div>
+                  </div>
+                </Link>
+
                 {/* 1. CMS Branding & Logo */}
                 <Link href="/admin/branding" className="group block">
                   <div className="rounded-xl border border-gold-400/50 bg-gradient-to-br from-gov-900 to-slate-900 p-4 text-white shadow-md transition group-hover:border-gold-300 group-hover:shadow-lg">

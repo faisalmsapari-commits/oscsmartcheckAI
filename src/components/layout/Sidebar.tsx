@@ -13,6 +13,7 @@ import {
   Rocket,
   Info,
   Palette,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -88,6 +89,14 @@ export function Sidebar({ currentTab }: SidebarProps) {
       icon: FolderLock,
       href: "/admin",
       description: "Kawalan peranan & parameter",
+      allowedRoles: ["ADMIN", "SUPER_ADMIN"],
+    },
+    {
+      id: "admin_users",
+      title: "Pengurusan Pengguna",
+      icon: Users,
+      href: "/admin/users",
+      description: "Akaun, peranan & kebenaran sistem",
       allowedRoles: ["ADMIN", "SUPER_ADMIN"],
     },
     {

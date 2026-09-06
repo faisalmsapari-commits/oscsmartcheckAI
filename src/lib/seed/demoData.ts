@@ -1573,3 +1573,143 @@ export function getDemoIssuesForApp(id: string) {
   return [];
 }
 
+export interface DemoSystemUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  organizationId: string;
+  department: string;
+  designation: string;
+  active: boolean;
+  lastActive: string;
+  createdAt: string;
+}
+
+export const DEMO_SYSTEM_USERS: DemoSystemUser[] = [
+  {
+    uid: "demo-admin-uid",
+    email: "admin.smartcheck@mplbp.gov.my",
+    displayName: "Pentadbir Utama Sistem (IT)",
+    role: "SUPER_ADMIN",
+    organizationId: "MPLBP",
+    department: "Unit Teknologi Maklumat & Keselamatan",
+    designation: "Pentadbir Keselamatan & RBAC Sistem",
+    active: true,
+    lastActive: "2026-09-07T07:30:00Z",
+    createdAt: "2026-01-01T00:00:00Z",
+  },
+  {
+    uid: "demo-faisal-uid",
+    email: "faisal.perancang@mplbp.gov.my",
+    displayName: "En. Faisal bin Ahmad",
+    role: "PLANNING_OFFICER",
+    organizationId: "MPLBP",
+    department: "Jabatan Perancangan Bandar",
+    designation: "Pegawai Perancang Bandar Kanan (J44)",
+    active: true,
+    lastActive: "2026-09-07T07:15:00Z",
+    createdAt: "2026-01-05T00:00:00Z",
+  },
+  {
+    uid: "demo-siti-uid",
+    email: "siti.osc@mplbp.gov.my",
+    displayName: "Pn. Siti Nurhaliza binti Bakar",
+    role: "OSC_OFFICER",
+    organizationId: "MPLBP",
+    department: "Unit Pusat Setempat (OSC)",
+    designation: "Pegawai Semakan OSC (N41)",
+    active: true,
+    lastActive: "2026-09-07T06:45:00Z",
+    createdAt: "2026-01-10T00:00:00Z",
+  },
+  {
+    uid: "demo-khairul-uid",
+    email: "khairul.gis@mplbp.gov.my",
+    displayName: "En. Khairul Azman",
+    role: "GIS_OFFICER",
+    organizationId: "MPLBP",
+    department: "Unit Sistem Maklumat Geografi (GIS)",
+    designation: "Pegawai GIS & Kadaster (F41)",
+    active: true,
+    lastActive: "2026-09-06T16:20:00Z",
+    createdAt: "2026-01-12T00:00:00Z",
+  },
+  {
+    uid: "demo-aminah-uid",
+    email: "aminah.oscmanager@mplbp.gov.my",
+    displayName: "Pn. Aminah Binti Hassan",
+    role: "OSC_MANAGER",
+    organizationId: "MPLBP",
+    department: "Unit Pusat Setempat (OSC)",
+    designation: "Ketua Unit Pusat Setempat (OSC)",
+    active: true,
+    lastActive: "2026-09-06T14:10:00Z",
+    createdAt: "2026-01-02T00:00:00Z",
+  },
+  {
+    uid: "demo-zamri-uid",
+    email: "zamri.pengurus@mplbp.gov.my",
+    displayName: "En. Zamri bin Abdullah",
+    role: "PLANNING_MANAGER",
+    organizationId: "MPLBP",
+    department: "Jabatan Perancangan Bandar",
+    designation: "Pengurus Jabatan Perancangan Bandar",
+    active: true,
+    lastActive: "2026-09-05T11:00:00Z",
+    createdAt: "2026-01-02T00:00:00Z",
+  },
+  {
+    uid: "demo-admin-secondary",
+    email: "admin.sekunder@mplbp.gov.my",
+    displayName: "En. Rosli bin Hashim",
+    role: "ADMIN",
+    organizationId: "MPLBP",
+    department: "Unit Pentadbiran Keselamatan",
+    designation: "Pentadbir Operasi Sistem",
+    active: true,
+    lastActive: "2026-09-04T09:30:00Z",
+    createdAt: "2026-01-15T00:00:00Z",
+  },
+  {
+    uid: "demo-applicant-01",
+    email: "perunding@serikedah.com.my",
+    displayName: "Pembinaan Seri Kedah Sdn Bhd",
+    role: "APPLICANT",
+    organizationId: "MPLBP",
+    department: "Perunding / PSP External",
+    designation: "Principal Submitting Person (PSP)",
+    active: true,
+    lastActive: "2026-09-07T05:20:00Z",
+    createdAt: "2026-02-01T00:00:00Z",
+  },
+  {
+    uid: "demo-applicant-02",
+    email: "projek@niagamahsuri.com",
+    displayName: "Syarikat Niaga Mahsuri Sdn Bhd",
+    role: "APPLICANT",
+    organizationId: "MPLBP",
+    department: "Pemaju Komersial External",
+    designation: "Wakil Pemaju Komersial",
+    active: true,
+    lastActive: "2026-09-06T18:00:00Z",
+    createdAt: "2026-02-05T00:00:00Z",
+  },
+  {
+    uid: "demo-applicant-inactive",
+    email: "bekas.perunding@langkawi.com",
+    displayName: "Perunding Bina Indah (Nyahaktif)",
+    role: "APPLICANT",
+    organizationId: "MPLBP",
+    department: "Perunding Arkitek External",
+    designation: "Bekas Perunding (Akaun Dinyahaktif)",
+    active: false,
+    lastActive: "2026-05-10T10:00:00Z",
+    createdAt: "2026-01-20T00:00:00Z",
+  },
+];
+
+export function getDemoSystemUsers(): DemoSystemUser[] {
+  return DEMO_SYSTEM_USERS;
+}
+
