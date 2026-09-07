@@ -30,4 +30,4 @@ jobs:
 
       - name: Golden Dataset Extraction Baseline (Non-blocking)
         continue-on-error: true
-        run: node tests/unit/golden-dataset.test.mjs
+        run: node tests/unit/golden-dataset-offline-smoketest.test.mjs
