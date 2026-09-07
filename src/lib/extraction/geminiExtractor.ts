@@ -101,6 +101,232 @@ export function detectFactConflicts(facts: PlanningFact[]): FactConflict[] {
 }
 
 /**
+ * Executes a live call to Gemini 1.5 Pro API when GEMINI_API_KEY is present
+ */
+async function callGeminiApiLive(
+  doc: NormalizedDocument,
+  applicationId: string,
+  documentVersion: number,
+  options?: ExtractFactsOptions
+): Promise<PlanningFact[] | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+    const promptText = `Extract all Malaysian Planning Facts (LCP parameters) from the following document text and tables.
+Output strict JSON adhering to the provided response schema. Include exact quoted evidence and page numbers.
+
+DOCUMENT CONTENT:
+${doc.pages.map((p) => `--- PAGE ${p.pageNumber} ---\n${p.text}`).join("\n\n")}`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              ...(options?.pageImages || []).map((img) => ({
+                inlineData: { mimeType: img.mimeType, data: img.base64Data },
+              })),
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: GEMINI_CONTROLLED_JSON_SCHEMA,
+          temperature: 0.1,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn(`Gemini API call returned status ${res.status}: ${res.statusText}`);
+      return null;
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) return null;
+
+    const parsed = JSON.parse(rawText) as {
+      facts?: Array<{
+        key: string;
+        label?: string;
+        category?: string;
+        rawValue?: unknown;
+        rawUnit?: string | null;
+        confidence?: number;
+        evidence?: Array<{ pageNumber?: number; quotedText?: string; tableReference?: string | null }>;
+      }>;
+    };
+
+    if (!parsed.facts || !Array.isArray(parsed.facts)) return null;
+
+    const now = new Date().toISOString();
+    return parsed.facts.map((f) => {
+      const isFound = f.rawValue !== null && f.rawValue !== undefined && String(f.rawValue).trim() !== "";
+      const conf = f.confidence ?? 0.9;
+      return {
+        factId: `${f.key}_v${documentVersion}`,
+        applicationId,
+        documentId: doc.documentId,
+        documentVersion,
+        key: f.key,
+        label: f.label || f.key,
+        category: (f.category as FactCategory) || "SITE",
+        value: isFound ? f.rawValue : null,
+        unit: normalizeUnitText(f.rawUnit || null),
+        normalizedValue: isFound ? f.rawValue : null,
+        status: isFound ? "EXTRACTED" : "NOT_FOUND",
+        confidence: conf,
+        confidenceLevel: conf >= 0.9 ? "HIGH" : conf >= 0.7 ? "MEDIUM" : "LOW",
+        sourceEvidence: (f.evidence || []).map((e) => ({
+          documentId: doc.documentId,
+          documentVersion,
+          pageNumber: e.pageNumber || 1,
+          quotedText: e.quotedText || "",
+          tableReference: e.tableReference || null,
+        })),
+        aiGenerated: true,
+        confirmedValue: null,
+        confirmedBy: null,
+        confirmedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+  } catch (err) {
+    console.warn("Gemini API call failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Dynamic regex-based text extraction for offline mode
+ */
+function extractFactsFromDocumentText(
+  doc: NormalizedDocument,
+  addFact: (
+    key: string,
+    label: string,
+    category: FactCategory,
+    rawValue: unknown,
+    rawUnit: string | null,
+    normalizer: (val: unknown) => number | string | boolean | null,
+    confidence: number,
+    evidence: { pageNumber: number; quotedText: string; tableReference?: string | null }[]
+  ) => void
+) {
+  for (const page of doc.pages) {
+    const text = page.text;
+    const pageNum = page.pageNumber;
+
+    const lotMatch = text.match(/(?:Nombor Lot|Lot)\s*:\s*(Lot\s*\d+)/i) || text.match(/(Lot\s*\d+)/i);
+    if (lotMatch) {
+      addFact("lotNumber", "Nombor Lot Tanah", "SITE", lotMatch[1], null, (v) => String(v), 0.95, [
+        { pageNumber: pageNum, quotedText: lotMatch[0] },
+      ]);
+    }
+
+    const mukimMatch = text.match(/Mukim\s*:\s*([A-Za-z]+)/i) || text.match(/Mukim\s+([A-Za-z]+)/i);
+    if (mukimMatch) {
+      addFact("mukim", "Mukim", "SITE", mukimMatch[1], null, (v) => String(v), 0.95, [
+        { pageNumber: pageNum, quotedText: mukimMatch[0] },
+      ]);
+    }
+
+    const distMatch = text.match(/Daerah\s*:\s*([A-Za-z]+)/i) || text.match(/Daerah\s+([A-Za-z]+)/i);
+    if (distMatch) {
+      addFact("district", "Daerah", "SITE", distMatch[1], null, (v) => String(v), 0.95, [
+        { pageNumber: pageNum, quotedText: distMatch[0] },
+      ]);
+    }
+
+    const siteAreaMatch = text.match(/Keluasan Tapak\s*:\s*([\d,.]+)\s*(m²|Hektar)?/i);
+    if (siteAreaMatch) {
+      addFact("siteAreaSqm", "Keluasan Tapak", "SITE", siteAreaMatch[1], siteAreaMatch[2] || "m²", normalizeArea, 0.95, [
+        { pageNumber: pageNum, quotedText: siteAreaMatch[0] },
+      ]);
+    }
+
+    const gfaMatch = text.match(/Keluasan Lantai Kasar(?:\s*\(GFA\))?\s*:\s*([\d,.]+)/i);
+    if (gfaMatch) {
+      addFact("grossFloorAreaSqm", "Jumlah GFA", "INTENSITY", gfaMatch[1], "m²", normalizeArea, 0.95, [
+        { pageNumber: pageNum, quotedText: gfaMatch[0] },
+      ]);
+    }
+
+    const prMatch = text.match(/Nisbah Plot(?:\s*\(Plot Ratio\))?\s*:\s*(?:1:)?([\d.]+)/i);
+    if (prMatch) {
+      addFact("plotRatio", "Nisbah Plot", "INTENSITY", prMatch[1], null, normalizePlotRatio, 0.95, [
+        { pageNumber: pageNum, quotedText: prMatch[0] },
+      ]);
+    }
+
+    const bcMatch = text.match(/Liputan Bangunan(?:\s*\(Plinth Area\))?\s*:\s*([\d.]+)%/i);
+    if (bcMatch) {
+      addFact("buildingCoveragePercent", "Liputan Bangunan", "INTENSITY", bcMatch[1], "%", normalizePercentage, 0.95, [
+        { pageNumber: pageNum, quotedText: bcMatch[0] },
+      ]);
+    }
+
+    const floorMatch = text.match(/Ketinggian(?:\s*Bangunan)?\s*:\s*(\d+)\s*Tingkat/i);
+    if (floorMatch) {
+      addFact("numberOfFloors", "Jumlah Tingkat", "BUILDING", floorMatch[1], "Tingkat", normalizeInteger, 0.95, [
+        { pageNumber: pageNum, quotedText: floorMatch[0] },
+      ]);
+    }
+
+    const heightMatch = text.match(/\(([\d.]+)\s*meter\)/i) || text.match(/Ketinggian.*:\s*([\d.]+)\s*m/i);
+    if (heightMatch) {
+      addFact("maximumBuildingHeightMeters", "Ketinggian Bangunan", "BUILDING", heightMatch[1], "m", normalizeDistance, 0.95, [
+        { pageNumber: pageNum, quotedText: heightMatch[0] },
+      ]);
+    }
+
+    const carMatch = text.match(/Tempat Letak Kereta\s*:\s*(\d+)/i);
+    if (carMatch) {
+      addFact("carParkingProvided", "Petak Kereta", "PARKING", carMatch[1], "petak", normalizeInteger, 0.95, [
+        { pageNumber: pageNum, quotedText: carMatch[0] },
+      ]);
+    }
+
+    const motoMatch = text.match(/Tempat Letak Motosikal\s*:\s*(\d+)/i);
+    if (motoMatch) {
+      addFact("motorcycleParkingProvided", "Petak Motosikal", "PARKING", motoMatch[1], "petak", normalizeInteger, 0.95, [
+        { pageNumber: pageNum, quotedText: motoMatch[0] },
+      ]);
+    }
+
+    const okuMatch = text.match(/Tempat Letak OKU\s*:\s*(\d+)/i);
+    if (okuMatch) {
+      addFact("disabledParkingProvided", "Petak OKU", "PARKING", okuMatch[1], "petak", normalizeInteger, 0.95, [
+        { pageNumber: pageNum, quotedText: okuMatch[0] },
+      ]);
+    }
+
+    const openSpaceMatch = text.match(/Kawasan Lapang\s*:\s*([\d,.]+)\s*m²/i);
+    if (openSpaceMatch) {
+      addFact("openSpaceAreaSqm", "Kawasan Lapang", "OPEN_SPACE", openSpaceMatch[1], "m²", normalizeArea, 0.95, [
+        { pageNumber: pageNum, quotedText: openSpaceMatch[0] },
+      ]);
+    }
+
+    const openSpacePctMatch = text.match(/Kawasan Lapang.*:\s*[\d,. ]+m²\s*\(([\d.]+)%\)/i);
+    if (openSpacePctMatch) {
+      addFact("openSpacePercent", "Peratus Kawasan Lapang", "OPEN_SPACE", openSpacePctMatch[1], "%", normalizePercentage, 0.95, [
+        { pageNumber: pageNum, quotedText: openSpacePctMatch[0] },
+      ]);
+    }
+  }
+}
+
+/**
  * Extracts structured Malaysian Planning Facts from normalized LCP document pages.
  * Enforces strict planning guardrails, zero hallucinations, source quotes, and deterministic normalizers.
  */
@@ -110,15 +336,28 @@ export async function extractPlanningFactsFromDocument(
   documentVersion: number,
   options?: ExtractFactsOptions
 ): Promise<ExtractionResult> {
-  const facts: PlanningFact[] = [];
-  const now = new Date().toISOString();
-
   const docType = options?.documentType || "LCP";
   const LAYOUT_DRIVEN_TYPES = ["SITE_PLAN", "LAYOUT_PLAN", "LOCATION_PLAN", "BUILDING_PLAN"];
   const isLayoutDriven = LAYOUT_DRIVEN_TYPES.includes(docType);
   const isMultimodalEnabled = Boolean(isLayoutDriven && options?.pageImages && options.pageImages.length > 0);
 
-  // Helper to build and push fact
+  // Attempt live Gemini API call first if key is configured
+  const liveFacts = await callGeminiApiLive(doc, applicationId, documentVersion, options);
+  if (liveFacts && liveFacts.length > 0) {
+    verifyEvidenceQuotes(liveFacts, doc);
+    const conflicts = detectFactConflicts(liveFacts);
+    return {
+      facts: liveFacts,
+      conflicts,
+      totalPages: doc.totalPages,
+      isMultimodal: isMultimodalEnabled,
+    };
+  }
+
+  // Fallback to dynamic text extraction
+  const facts: PlanningFact[] = [];
+  const now = new Date().toISOString();
+
   const addFact = (
     key: string,
     label: string,
@@ -137,7 +376,6 @@ export async function extractPlanningFactsFromDocument(
 
     let score = isFound ? Math.min(1.0, Math.max(0, confidence)) : 0;
 
-    // Strict Evidence Rule: If no valid source quote exists, cap score below 0.9 and forbid HIGH confidence
     if (validEvidence.length === 0 && isFound) {
       score = Math.min(score, 0.89);
     }
@@ -185,419 +423,7 @@ export async function extractPlanningFactsFromDocument(
     facts.push(fact);
   };
 
-  // 1. Project Information
-  addFact(
-    "projectTitle",
-    "Tajuk Projek Cadangan",
-    "PROJECT",
-    "Cadangan Pembangunan Sebuah Hotel Butik 12 Tingkat (180 Bilik) di Atas Lot 1234, Mukim Kuah, Langkawi",
-    null,
-    (v) => (v ? String(v) : null),
-    0.98,
-    [
-      {
-        pageNumber: 1,
-        quotedText:
-          "CADANGAN PEMBANGUNAN SEBUAH HOTEL BUTIK 12 TINGKAT (180 BILIK) BESERTA KEMUDAHAN REKREASI DAN TEMPAT LETAK KERETA DI ATAS LOT 1234, MUKIM KUAH, DAERAH LANGKAWI",
-      },
-    ]
-  );
-
-  addFact(
-    "developmentType",
-    "Jenis Pembangunan Utama",
-    "PROJECT",
-    "HOTEL",
-    null,
-    (v) => (v ? String(v) : null),
-    0.96,
-    [
-      {
-        pageNumber: 1,
-        quotedText: "CADANGAN PEMBANGUNAN SEBUAH HOTEL BUTIK",
-      },
-    ]
-  );
-
-  addFact(
-    "applicantName",
-    "Nama Pemaju / Pemohon",
-    "PROJECT",
-    "Langkawi Resorts Sdn Bhd",
-    null,
-    (v) => (v ? String(v) : null),
-    0.95,
-    [
-      {
-        pageNumber: 1,
-        quotedText: "PEMOHON / PEMAJU: LANGKAWI RESORTS SDN BHD",
-      },
-    ]
-  );
-
-  addFact(
-    "consultantName",
-    "Jururancang Bandar / PSP",
-    "PROJECT",
-    "Perunding Perancang Utama",
-    null,
-    (v) => (v ? String(v) : null),
-    0.94,
-    [
-      {
-        pageNumber: 1,
-        quotedText: "JURURANCANG BANDAR: PERUNDING PERANCANG UTAMA",
-      },
-    ]
-  );
-
-  // 2. Site Information
-  addFact(
-    "lotNumber",
-    "Nombor Lot Tanah",
-    "SITE",
-    "Lot 1234",
-    null,
-    (v) => (v ? String(v) : null),
-    0.99,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Nombor Lot: Lot 1234",
-      },
-    ]
-  );
-
-  addFact(
-    "mukim",
-    "Mukim",
-    "SITE",
-    "Kuah",
-    null,
-    (v) => (v ? String(v) : null),
-    0.99,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Tapak cadangan terletak di Mukim Kuah, Daerah Langkawi",
-      },
-    ]
-  );
-
-  addFact(
-    "district",
-    "Daerah",
-    "SITE",
-    "Langkawi",
-    null,
-    (v) => (v ? String(v) : null),
-    0.99,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Daerah Langkawi, Kedah.",
-      },
-    ]
-  );
-
-  addFact(
-    "siteAreaSqm",
-    "Keluasan Tapak Pembangunan (m²)",
-    "AREA",
-    "12,500 m² (1.25 hektar)",
-    "m²",
-    normalizeArea,
-    0.98,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Keluasan Tapak: 12,500 m² (1.25 hektar / 3.08 ekar).",
-      },
-    ]
-  );
-
-  addFact(
-    "proposedLandUse",
-    "Guna Tanah Dicadangkan",
-    "LAND_USE",
-    "Perniagaan / Pelancongan (Hotel)",
-    null,
-    (v) => (v ? String(v) : null),
-    0.95,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Guna Tanah Dicadangkan: Perniagaan / Pelancongan (Hotel).",
-      },
-    ]
-  );
-
-  addFact(
-    "existingLandUse",
-    "Guna Tanah Sedia Ada",
-    "LAND_USE",
-    "Tanah Kosong / Belukar",
-    null,
-    (v) => (v ? String(v) : null),
-    0.92,
-    [
-      {
-        pageNumber: 12,
-        quotedText: "Guna Tanah Sedia Ada: Tanah Kosong / Belukar.",
-      },
-    ]
-  );
-
-  // 3. Development Intensity
-  addFact(
-    "grossFloorAreaSqm",
-    "Jumlah Keluasan Lantai Kasar (GFA)",
-    "INTENSITY",
-    "28,500 m²",
-    "m²",
-    normalizeArea,
-    0.97,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Jumlah Keluasan Lantai Kasar (GFA): 28,500 m²",
-      },
-    ]
-  );
-
-  addFact(
-    "plotRatio",
-    "Nisbah Plot",
-    "INTENSITY",
-    "1:2.5",
-    "nisbah",
-    normalizePlotRatio,
-    0.98,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Nisbah Plot (Plot Ratio): 1:2.5",
-      },
-    ]
-  );
-
-  addFact(
-    "buildingCoveragePercent",
-    "Liputan Bangunan (Plinth Area %)",
-    "INTENSITY",
-    "42%",
-    "%",
-    normalizePercentage,
-    0.94,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Liputan Bangunan (Plinth Area): 42% (5,250 m²)",
-      },
-    ]
-  );
-
-  addFact(
-    "numberOfFloors",
-    "Bilangan Tingkat Bangunan",
-    "BUILDING",
-    "12 Tingkat",
-    "tingkat",
-    normalizeInteger,
-    0.98,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Ketinggian Bangunan: 12 Tingkat (Maksimum 45 meter).",
-      },
-    ]
-  );
-
-  addFact(
-    "maximumBuildingHeightMeters",
-    "Ketinggian Maksimum Bangunan (m)",
-    "BUILDING",
-    "45 meter",
-    "meter",
-    normalizeDistance,
-    0.95,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Ketinggian Bangunan: 12 Tingkat (Maksimum 45 meter).",
-      },
-    ]
-  );
-
-  addFact(
-    "hotelRooms",
-    "Jumlah Bilik Hotel",
-    "BUILDING",
-    "180 bilik",
-    "unit",
-    normalizeInteger,
-    0.97,
-    [
-      {
-        pageNumber: 35,
-        quotedText: "Jumlah Bilik Hotel: 180 bilik hotel taraf 4-bintang.",
-      },
-    ]
-  );
-
-  // 4. Parking
-  addFact(
-    "carParkingProvided",
-    "Tempat Letak Kereta (Petak)",
-    "PARKING",
-    "172 petak",
-    "petak",
-    normalizeInteger,
-    0.98,
-    [
-      {
-        pageNumber: 42,
-        quotedText: "Jumlah Tempat Letak Kereta Dicadangkan: 172 petak kereta.",
-      },
-    ]
-  );
-
-  addFact(
-    "motorcycleParkingProvided",
-    "Tempat Letak Motosikal (Petak)",
-    "PARKING",
-    "60 petak",
-    "petak",
-    normalizeInteger,
-    0.96,
-    [
-      {
-        pageNumber: 42,
-        quotedText: "Tempat Letak Motosikal: 60 petak motosikal.",
-      },
-    ]
-  );
-
-  addFact(
-    "disabledParkingProvided",
-    "Tempat Letak Kereta OKU",
-    "PARKING",
-    "4 petak",
-    "petak",
-    normalizeInteger,
-    0.95,
-    [
-      {
-        pageNumber: 42,
-        quotedText: "Tempat Letak Kereta OKU: 4 petak.",
-      },
-    ]
-  );
-
-  addFact(
-    "busParkingProvided",
-    "Tempat Letak Bas Pelancong",
-    "PARKING",
-    "3 petak",
-    "petak",
-    normalizeInteger,
-    0.94,
-    [
-      {
-        pageNumber: 42,
-        quotedText: "Tempat Letak Bas Pelancong: 3 petak.",
-      },
-    ]
-  );
-
-  // 5. Open Space & Access
-  addFact(
-    "openSpaceAreaSqm",
-    "Keluasan Kawasan Lapang (m²)",
-    "OPEN_SPACE",
-    "1,250 m²",
-    "m²",
-    normalizeArea,
-    0.97,
-    [
-      {
-        pageNumber: 56,
-        quotedText: "Keluasan Kawasan Lapang Berfungsi: 1,250 m²",
-      },
-    ]
-  );
-
-  addFact(
-    "openSpacePercent",
-    "Peratusan Kawasan Lapang (%)",
-    "OPEN_SPACE",
-    "10.0%",
-    "%",
-    normalizePercentage,
-    0.97,
-    [
-      {
-        pageNumber: 56,
-        quotedText: "bersamaan 10.0% daripada keluasan keseluruhan tapak pembangunan",
-      },
-    ]
-  );
-
-  addFact(
-    "mainAccessRoad",
-    "Laluan Akses Utama",
-    "ACCESS",
-    "Jalan Persiaran Kuah",
-    null,
-    (v) => (v ? String(v) : null),
-    0.92,
-    [
-      {
-        pageNumber: 68,
-        quotedText: "Laluan masuk dan keluar utama melalui Jalan Persiaran Kuah",
-      },
-    ]
-  );
-
-  addFact(
-    "roadReserveWidthMeters",
-    "Lebar Rizab Jalan (m)",
-    "ACCESS",
-    "20.0 meter (66 kaki)",
-    "meter",
-    normalizeDistance,
-    0.95,
-    [
-      {
-        pageNumber: 68,
-        quotedText: "rizab jalan selebar 20.0 meter (66 kaki).",
-      },
-    ]
-  );
-
-  // 6. Missing fact examples (NOT_FOUND)
-  addFact(
-    "totalResidentialUnits",
-    "Jumlah Unit Kediaman",
-    "HOUSING",
-    null,
-    null,
-    normalizeInteger,
-    0,
-    []
-  );
-
-  addFact(
-    "densityUnitsPerHectare",
-    "Kepadatan Kediaman (Unit/Hektar)",
-    "HOUSING",
-    null,
-    null,
-    normalizeInteger,
-    0,
-    []
-  );
-
+  extractFactsFromDocumentText(doc, addFact);
   verifyEvidenceQuotes(facts, doc);
 
   const conflicts = detectFactConflicts(facts);
@@ -661,7 +487,6 @@ export function verifyEvidenceQuotes(facts: PlanningFact[], doc: NormalizedDocum
       const targetText = page ? page.text : docFullText;
       const sim = computeTextSimilarity(ev.quotedText, targetText);
 
-      // 80% similarity threshold to allow minor OCR whitespace/character variations while rejecting hallucinations
       if (sim >= 0.8) {
         ev.evidenceVerified = true;
       } else {
@@ -678,4 +503,3 @@ export function verifyEvidenceQuotes(facts: PlanningFact[], doc: NormalizedDocum
     }
   }
 }
-
