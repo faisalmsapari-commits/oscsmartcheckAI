@@ -374,7 +374,7 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Filter & Search Bar */}
-            <Card padding="p-4">
+            <Card>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -436,7 +436,7 @@ export default function AdminUsersPage() {
             </Card>
 
             {/* Users Table */}
-            <Card padding="p-0">
+            <Card className="[&>div:last-child]:p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 uppercase">

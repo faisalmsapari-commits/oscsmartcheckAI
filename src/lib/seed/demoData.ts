@@ -1,3 +1,4 @@
+import type { UserRole } from "@/types/common";
 import type {
   CommentDraft,
   VerifiedComment,
