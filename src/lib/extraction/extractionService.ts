@@ -28,7 +28,7 @@ export async function startLcpProcessing(
   customDb?: Firestore
 ): Promise<{ jobId: string; status: string; isNewJob: boolean }> {
   // Demo applications or local dev mode fallback
-  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+  if ((applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) && !customDb) {
     return {
       jobId: `job-demo-reprocess-${Date.now()}`,
       status: "COMPLETED",
@@ -356,7 +356,7 @@ export async function confirmExtractedFact(
   confirmedValue?: unknown,
   customDb?: Firestore
 ): Promise<void> {
-  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+  if ((applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) && !customDb) {
     return;
   }
 
@@ -406,7 +406,7 @@ export async function correctExtractedFact(
   reason?: string,
   customDb?: Firestore
 ): Promise<void> {
-  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+  if ((applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) && !customDb) {
     return;
   }
 
@@ -456,7 +456,7 @@ export async function markFactUnknown(
   officerUid: string,
   customDb?: Firestore
 ): Promise<void> {
-  if (applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) {
+  if ((applicationId.startsWith("app-demo-") || !isCloudFirestoreConfigured()) && !customDb) {
     return;
   }
 

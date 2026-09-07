@@ -1,5 +1,7 @@
 # 🏛️ OSC SmartCheck AI — Portal Semakan Pintar Kebolehlaksanaan OSC MPLBP
 
+[![CI/CD Pipeline](https://github.com/faisalmsapari-commits/oscsmartcheckAI/actions/workflows/ci.yml/badge.svg)](https://github.com/faisalmsapari-commits/oscsmartcheckAI/actions/workflows/ci.yml)
+
 Sistem Sokongan Keputusan Berkanun Perancangan Bandar & Semakan Automatik Pelan Pembangunan Berasaskan AI & SmartGIS untuk **Majlis Perbandaran Langkawi Bandaraya Pelancongan (MPLBP)**.
 
 ---

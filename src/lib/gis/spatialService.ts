@@ -132,7 +132,7 @@ export async function getApplicationSite(
   applicationId: string,
   customDb?: Firestore
 ): Promise<ApplicationSite | null> {
-  if (!isCloudFirestoreConfigured()) {
+  if (!isCloudFirestoreConfigured() && !customDb) {
     try {
       const demoGis = getDemoGisForApp(applicationId);
       return (demoGis?.site as unknown as ApplicationSite) || null;
@@ -183,7 +183,9 @@ export async function compareLcpAndGisSite(
   const gisMukim = site?.mukim || null;
   const gisArea = site?.cadastralAreaSqm || null;
 
-  const lotMatch = Boolean(lcpLot && gisLot && gisLot.toLowerCase().includes(lcpLot.toLowerCase()));
+  const cleanLcp = lcpLot ? lcpLot.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+  const cleanGis = gisLot ? gisLot.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+  const lotMatch = Boolean(cleanLcp && cleanGis && (cleanGis.includes(cleanLcp) || cleanLcp.includes(cleanGis)));
   const mukimMatch = Boolean(lcpMukim && gisMukim && gisMukim.toLowerCase() === lcpMukim.toLowerCase());
 
   let diffSqm: number | null = null;
