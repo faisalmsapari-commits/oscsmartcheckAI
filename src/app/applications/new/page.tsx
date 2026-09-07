@@ -173,8 +173,42 @@ export default function NewApplicationPage() {
     triggerAutosave();
   };
 
-  const handleAiDataExtracted = (extractedData: Partial<Application>) => {
+  const handleEnsureApplicationCreated = async (): Promise<string> => {
+    if (createdAppId) return createdAppId;
+    if (!user) throw new Error("Pengguna belum dilog masuk.");
+
+    const token = await user.getIdToken();
+    const payload = {
+      ...formDataRef.current,
+      applicationId: undefined,
+    };
+
+    const res = await fetch("/api/applications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error("Gagal mendaftarkan draf permohonan untuk muat naik dokumen.");
+    }
+
+    const data = await res.json();
+    const newId = data.applicationId;
+    if (!newId) throw new Error("Gagal memperoleh ID draf permohonan.");
+
+    setCreatedAppId(newId);
+    return newId;
+  };
+
+  const handleAiDataExtracted = (extractedData: Partial<Application>, notice?: string) => {
     setErrorMessage(null);
+    if (notice) {
+      setErrorMessage(notice);
+    }
     setFormData((prev) => ({
       ...prev,
       ...extractedData,
@@ -203,7 +237,6 @@ export default function NewApplicationPage() {
         ...extractedData.declaration,
       } as ApplicantDeclaration,
     }));
-    setMaxReachedStep(6);
     triggerAutosave();
   };
 
@@ -349,7 +382,11 @@ export default function NewApplicationPage() {
             )}
 
             {/* AI Document & CAD Auto-Extraction Hub */}
-            <AiDocumentIngestionZone onDataExtracted={handleAiDataExtracted} />
+            <AiDocumentIngestionZone
+              applicationId={createdAppId}
+              onEnsureApplicationCreated={handleEnsureApplicationCreated}
+              onDataExtracted={handleAiDataExtracted}
+            />
 
             {/* Form Stepper Card */}
             <div ref={formCardRef} className="scroll-mt-20">

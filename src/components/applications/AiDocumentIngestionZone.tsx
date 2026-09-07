@@ -11,8 +11,12 @@ import {
   Loader2,
   ShieldCheck,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { Application } from "@/types/application";
+import { PlanningFact } from "@/types/extraction";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { mapRealFactsToApplication } from "@/lib/extraction/factMapper";
 
 export interface ExtractedPreset {
   id: string;
@@ -313,401 +317,38 @@ export const SAMPLE_PRESETS: ExtractedPreset[] = [
   },
 ];
 
-function createFastFallbackPreset(
-  file: File,
-  type: "LCP" | "DWG",
-  currentLcp: File | null,
-  currentDwg: File | null
-): ExtractedPreset {
-  const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : file.name;
-  const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : `Pelan_CAD_${file.name.replace(/\.(pdf|dwg|dxf)$/i, "")}.dwg`;
-  const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ").trim();
 
-  const cleanNameUpper = cleanName
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.toUpperCase())
-    .join(" ");
-
-  const lcpSize = type === "LCP" ? file.size : currentLcp?.size || 4500000;
-  const dwgSize = type === "DWG" ? file.size : currentDwg?.size || 12000000;
-
-  let hash = 0;
-  const strSeed = `${lcpFileName}_${lcpSize}_${dwgFileName}_${dwgSize}`;
-  for (let i = 0; i < strSeed.length; i++) {
-    hash = (hash << 5) - hash + strSeed.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
-
-  const MUKIM_LIST = ["Kuah", "Kedawang", "Bohor", "Padang Matsirat", "Ayer Hangat", "Ulu Melaka"];
-  const ARCHITECT_LIST = [
-    "Ar. Ahmad Farhan bin Mohamad",
-    "Ar. Noraini binti Kassim",
-    "Ar. Lim Kok Seng",
-    "Ar. Mohd Rizal bin Abdullah",
-    "Ar. Chai Chee Keong",
-  ];
-
-  const lotNumber = `Lot ${(absHash % 899) + 100}`;
-  const mukim = MUKIM_LIST[absHash % MUKIM_LIST.length];
-  const titleNumber = `${["GRN", "GM", "HS(D)"][absHash % 3]} ${(absHash % 8990) + 1010}`;
-  const siteAreaSqm = (absHash % 22000) + 11000;
-
-  const totalDevelopmentUnits = (absHash % 110) + 30;
-  const plotRatio = parseFloat(((absHash % 25) / 10 + 1.1).toFixed(1));
-  const parkingProvided = (absHash % 140) + 70;
-  const siteCoveragePercent = (absHash % 30) + 40;
-  const pspName = ARCHITECT_LIST[absHash % ARCHITECT_LIST.length];
-  const lamNo = `LAM A/${(absHash % 1800) + 1100}`;
-  const gfa = Math.round(siteAreaSqm * plotRatio);
-  const buildingFootprintSqm = Math.round(siteAreaSqm * (siteCoveragePercent / 100));
-
-  const projRefCode = cleanNameUpper.slice(0, 6).replace(/[^A-Z0-9]/g, "X") || "LCP";
-  const appTitle = `Cadangan Pembangunan ${cleanNameUpper}`;
-
-  return {
-    id: `custom-${Date.now()}`,
-    name: appTitle,
-    lcpFileName,
-    dwgFileName,
-    lcpFileSize: `${(lcpSize / 1024 / 1024).toFixed(2)} MB`,
-    dwgFileSize: `${(dwgSize / 1024 / 1024).toFixed(2)} MB`,
-    highlights: [
-      `Mukim ${mukim} (${lotNumber})`,
-      `Keluasan: ${siteAreaSqm.toLocaleString()} m² • ${totalDevelopmentUnits} Unit`,
-      `Nisbah Plot 1:${plotRatio} • ${parkingProvided} Parkir`,
-      `Perunding: ${pspName.slice(0, 25)}`,
-    ],
-    extractedData: {
-      title: appTitle,
-      applicationType: "Kebenaran Merancang",
-      planningApplicationCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
-      submissionTitle: appTitle,
-      projectReference: `PRJ/2026/${projRefCode}-${(absHash % 89) + 10}`,
-      developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
-      applicantInfo: {
-        applicantName: `Pemohon ${cleanNameUpper}`,
-        applicantType: "COMPANY",
-        companyName: `Syarikat Pemajuan ${cleanNameUpper} Sdn Bhd`,
-        registrationNumber: `202401${(absHash % 899999) + 100000} (${(absHash % 899999) + 100000}-P)`,
-        email: `info@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "pemajuan"}.com.my`,
-        phone: "+604-9669900",
-        address: `Mukim ${mukim}, 07000 Langkawi, Kedah`,
-      },
-      consultantInfo: {
-        principalSubmittingPerson: pspName,
-        consultantCompany: `Perunding Arkitek ${cleanNameUpper} Sdn Bhd`,
-        professionalRegistrationNo: lamNo,
-        email: `arkitek@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "perunding"}.com.my`,
-        phone: "+604-9668811",
-      },
-      projectInfo: {
-        projectName: appTitle,
-        developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
-        developmentSubtype: totalDevelopmentUnits > 70 ? "Pangsapuri / Rumah Teres" : "Kompleks Komersial & Kedai",
-        developmentDescription: `Cadangan membina pembangunan ${cleanNameUpper} di atas ${lotNumber}, Mukim ${mukim}, Langkawi.`,
-        developmentCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
-        proposedUse: totalDevelopmentUnits > 70 ? "Perumahan & Kediaman" : "Perniagaan & Komersial",
-        existingUse: "Tanah Kosong / Belukar",
-        estimatedProjectValue: (absHash % 35000000) + 15000000,
-      },
-      siteInfo: {
-        lots: [
-          {
-            lotNumber,
-            mukim,
-            titleNumber,
-            landStatus: "HAKMILIK_KEKAL",
-          },
-        ],
-        mukim,
-        district: "Langkawi",
-        state: "Kedah",
-        siteAddress: `Tapak Cadangan (${cleanNameUpper}), ${lotNumber}, Mukim ${mukim}, 07000 Langkawi, Kedah`,
-        siteArea: {
-          originalValue: siteAreaSqm,
-          originalUnit: "SQM",
-          siteAreaSqm: siteAreaSqm,
-        },
-        location: {
-          latitude: parseFloat((6.28 + (absHash % 100) / 1000).toFixed(4)),
-          longitude: parseFloat((99.72 + (absHash % 150) / 1000).toFixed(4)),
-        },
-      },
-      developmentParameters: {
-        source: "DOCUMENT_AI",
-        totalDevelopmentUnits,
-        residentialUnits: totalDevelopmentUnits > 70 ? totalDevelopmentUnits : null,
-        hotelRooms: totalDevelopmentUnits <= 70 ? totalDevelopmentUnits : null,
-        commercialFloorAreaSqm: gfa,
-        grossFloorAreaSqm: gfa,
-        buildingFootprintSqm,
-        numberOfBlocks: (absHash % 4) + 1,
-        maximumFloors: (absHash % 10) + 2,
-        maximumBuildingHeightM: parseFloat((((absHash % 10) + 2) * 3.5).toFixed(1)),
-        plotRatio,
-        siteCoveragePercent,
-        parkingProvided,
-        motorcycleParkingProvided: Math.floor(parkingProvided * 0.4),
-        disabledParkingProvided: Math.max(2, Math.floor(parkingProvided * 0.03)),
-        openSpaceAreaSqm: Math.round(siteAreaSqm * 0.1),
-        openSpacePercent: 10,
-      },
-      declaration: {
-        declarationAccepted: true,
-        declaredAt: new Date().toISOString(),
-        declaredBy: `${pspName} (PSP / Perunding)`,
-      },
-    },
-  };
-}
-
-async function parseOrGenerateCustomPreset(
-  file: File,
-  type: "LCP" | "DWG",
-  currentLcp: File | null,
-  currentDwg: File | null
-): Promise<ExtractedPreset> {
-  const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : file.name;
-  const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : `Pelan_CAD_${file.name.replace(/\.(pdf|dwg|dxf)$/i, "")}.dwg`;
-  const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ").trim();
-
-  const cleanNameUpper = cleanName
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.toUpperCase())
-    .join(" ");
-
-  const lcpSize = type === "LCP" ? file.size : currentLcp?.size || 4500000;
-  const dwgSize = type === "DWG" ? file.size : currentDwg?.size || 12000000;
-
-  // 1. Safely read text buffer slice (first 256KB) from PDF to avoid V8 memory string overflow
-  let fileText = "";
-  try {
-    const sliceBlob = file.slice(0, 256 * 1024);
-    const buffer = await sliceBlob.arrayBuffer();
-    const decoder = new TextDecoder("utf-8", { fatal: false });
-    const rawStr = decoder.decode(buffer);
-    fileText = rawStr.slice(0, 50000);
-  } catch {
-    fileText = "";
-  }
-
-  // 2. Extract keywords from raw text if present
-  const lotMatch = fileText.match(/Lot\s*([0-9]+(?:\/[0-9]+)?)/i);
-  const mukimMatch = fileText.match(/Mukim\s*(Kuah|Kedawang|Bohor|Padang\s*Matsirat|Ayer\s*Hangat|Ulu\s*Melaka|Tebing\s*Tinggi)/i);
-  const areaMatch = fileText.match(/(?:Keluasan|Luas)\s*(?:Tapak)?\s*:?\s*([0-9,.]+)\s*(m²|sqm|hektar|ekar)/i);
-  const plotRatioMatch = fileText.match(/(?:Nisbah\s*Plot|Plot\s*Ratio)\s*:?\s*(?:1\s*:\s*)?([0-9.]+)/i);
-  const unitsMatch = fileText.match(/([0-9]+)\s*(?:unit|bilik)/i);
-  const parkingMatch = fileText.match(/([0-9]+)\s*(?:tempat\s*letak\s*kereta|tlk|parking)/i);
-  const consultantMatch = fileText.match(/(?:Ar\.|Perunding)\s+([A-Za-z\s]+)(?:\(LAM\s+[A-Z0-9/]+\))?/i);
-
-  // 3. Hash calculation for deterministic fallback of missing fields
-  let hash = 0;
-  const strSeed = `${lcpFileName}_${lcpSize}_${dwgFileName}_${dwgSize}`;
-  for (let i = 0; i < strSeed.length; i++) {
-    hash = (hash << 5) - hash + strSeed.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
-
-  const MUKIM_LIST = ["Kuah", "Kedawang", "Bohor", "Padang Matsirat", "Ayer Hangat", "Ulu Melaka"];
-  const ARCHITECT_LIST = [
-    "Ar. Ahmad Farhan bin Mohamad",
-    "Ar. Noraini binti Kassim",
-    "Ar. Lim Kok Seng",
-    "Ar. Mohd Rizal bin Abdullah",
-    "Ar. Chai Chee Keong",
-  ];
-
-  const lotNumber = lotMatch ? `Lot ${lotMatch[1]}` : `Lot ${(absHash % 899) + 100}`;
-  const mukim = mukimMatch ? mukimMatch[1] : MUKIM_LIST[absHash % MUKIM_LIST.length];
-  const titleNumber = `${["GRN", "GM", "HS(D)"][absHash % 3]} ${(absHash % 8990) + 1010}`;
-
-  let siteAreaSqm = (absHash % 22000) + 11000;
-  if (areaMatch) {
-    const val = parseFloat(areaMatch[1].replace(/,/g, ""));
-    const unit = areaMatch[2].toLowerCase();
-    if (!isNaN(val)) {
-      if (unit.includes("hektar")) siteAreaSqm = Math.round(val * 10000);
-      else if (unit.includes("ekar")) siteAreaSqm = Math.round(val * 4046.86);
-      else siteAreaSqm = Math.round(val);
-    }
-  }
-
-  const totalDevelopmentUnits = unitsMatch ? parseInt(unitsMatch[1], 10) : (absHash % 110) + 30;
-  const plotRatio = plotRatioMatch ? parseFloat(plotRatioMatch[1]) : parseFloat(((absHash % 25) / 10 + 1.1).toFixed(1));
-  const parkingProvided = parkingMatch ? parseInt(parkingMatch[1], 10) : (absHash % 140) + 70;
-  const siteCoveragePercent = (absHash % 30) + 40;
-  const pspName = consultantMatch ? consultantMatch[0].trim() : ARCHITECT_LIST[absHash % ARCHITECT_LIST.length];
-  const lamNo = `LAM A/${(absHash % 1800) + 1100}`;
-  const gfa = Math.round(siteAreaSqm * plotRatio);
-  const buildingFootprintSqm = Math.round(siteAreaSqm * (siteCoveragePercent / 100));
-
-  const projRefCode = cleanNameUpper.slice(0, 6).replace(/[^A-Z0-9]/g, "X") || "LCP";
-  const appTitle = `Cadangan Pembangunan ${cleanNameUpper}`;
-
-  return {
-    id: `custom-${Date.now()}`,
-    name: appTitle,
-    lcpFileName,
-    dwgFileName,
-    lcpFileSize: `${(lcpSize / 1024 / 1024).toFixed(2)} MB`,
-    dwgFileSize: `${(dwgSize / 1024 / 1024).toFixed(2)} MB`,
-    highlights: [
-      `Mukim ${mukim} (${lotNumber})`,
-      `Keluasan: ${siteAreaSqm.toLocaleString()} m² • ${totalDevelopmentUnits} Unit`,
-      `Nisbah Plot 1:${plotRatio} • ${parkingProvided} Parkir`,
-      `Perunding: ${pspName.slice(0, 25)}`,
-    ],
-    extractedData: {
-      title: appTitle,
-      applicationType: "Kebenaran Merancang",
-      planningApplicationCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
-      submissionTitle: appTitle,
-      projectReference: `PRJ/2026/${projRefCode}-${(absHash % 89) + 10}`,
-      developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
-      applicantInfo: {
-        applicantName: `Pemohon ${cleanNameUpper}`,
-        applicantType: "COMPANY",
-        companyName: `Syarikat Pemajuan ${cleanNameUpper} Sdn Bhd`,
-        registrationNumber: `202401${(absHash % 899999) + 100000} (${(absHash % 899999) + 100000}-P)`,
-        email: `info@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "pemajuan"}.com.my`,
-        phone: "+604-9669900",
-        address: `Mukim ${mukim}, 07000 Langkawi, Kedah`,
-      },
-      consultantInfo: {
-        principalSubmittingPerson: pspName,
-        consultantCompany: `Perunding Arkitek ${cleanNameUpper} Sdn Bhd`,
-        professionalRegistrationNo: lamNo,
-        email: `arkitek@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "perunding"}.com.my`,
-        phone: "+604-9668811",
-      },
-      projectInfo: {
-        projectName: appTitle,
-        developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
-        developmentSubtype: totalDevelopmentUnits > 70 ? "Pangsapuri / Rumah Teres" : "Kompleks Komersial & Kedai",
-        developmentDescription: `Cadangan membina pembangunan ${cleanNameUpper} di atas ${lotNumber}, Mukim ${mukim}, Langkawi.`,
-        developmentCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
-        proposedUse: totalDevelopmentUnits > 70 ? "Perumahan & Kediaman" : "Perniagaan & Komersial",
-        existingUse: "Tanah Kosong / Belukar",
-        estimatedProjectValue: (absHash % 35000000) + 15000000,
-      },
-      siteInfo: {
-        lots: [
-          {
-            lotNumber,
-            mukim,
-            titleNumber,
-            landStatus: "HAKMILIK_KEKAL",
-          },
-        ],
-        mukim,
-        district: "Langkawi",
-        state: "Kedah",
-        siteAddress: `Tapak Cadangan (${cleanNameUpper}), ${lotNumber}, Mukim ${mukim}, 07000 Langkawi, Kedah`,
-        siteArea: {
-          originalValue: siteAreaSqm,
-          originalUnit: "SQM",
-          siteAreaSqm: siteAreaSqm,
-        },
-        location: {
-          latitude: parseFloat((6.28 + (absHash % 100) / 1000).toFixed(4)),
-          longitude: parseFloat((99.72 + (absHash % 150) / 1000).toFixed(4)),
-        },
-      },
-      developmentParameters: {
-        source: "DOCUMENT_AI",
-        totalDevelopmentUnits,
-        residentialUnits: totalDevelopmentUnits > 70 ? totalDevelopmentUnits : null,
-        hotelRooms: totalDevelopmentUnits <= 70 ? totalDevelopmentUnits : null,
-        commercialFloorAreaSqm: gfa,
-        grossFloorAreaSqm: gfa,
-        buildingFootprintSqm,
-        numberOfBlocks: (absHash % 4) + 1,
-        maximumFloors: (absHash % 10) + 2,
-        maximumBuildingHeightM: parseFloat((((absHash % 10) + 2) * 3.5).toFixed(1)),
-        plotRatio,
-        siteCoveragePercent,
-        parkingProvided,
-        motorcycleParkingProvided: Math.floor(parkingProvided * 0.4),
-        disabledParkingProvided: Math.max(2, Math.floor(parkingProvided * 0.03)),
-        openSpaceAreaSqm: Math.round(siteAreaSqm * 0.1),
-        openSpacePercent: 10,
-      },
-      declaration: {
-        declarationAccepted: true,
-        declaredAt: new Date().toISOString(),
-        declaredBy: `${pspName} (PSP / Perunding)`,
-      },
-    },
-  };
-}
 
 interface AiDocumentIngestionZoneProps {
-  onDataExtracted: (extractedData: Partial<Application>) => void;
+  applicationId?: string | null;
+  onEnsureApplicationCreated?: () => Promise<string>;
+  onDataExtracted: (extractedData: Partial<Application>, extractedNotice?: string) => void;
 }
 
-export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestionZoneProps) {
+export function AiDocumentIngestionZone({
+  applicationId,
+  onEnsureApplicationCreated,
+  onDataExtracted,
+}: AiDocumentIngestionZoneProps) {
+  const { user } = useAuth();
   const [lcpFile, setLcpFile] = useState<File | null>(null);
   const [dwgFile, setDwgFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progressStep, setProgressStep] = useState<number>(0);
+  const [progressStageText, setProgressStageText] = useState<string>("");
   const [activeExtractedPreset, setActiveExtractedPreset] = useState<ExtractedPreset | null>(null);
   const [qualityErrorMessage, setQualityErrorMessage] = useState<string | null>(null);
-
-  const processingSteps = [
-    "Mengimbas dokumen LCP (PDF) & membaca Title Block pelan...",
-    "Menganalisis lapisan CAD (DWG) & perimeter poligon tapak...",
-    "AI mengekstrak entiti perancangan (Zon RTD, Keluasan, Anjakan & Nisbah Plot)...",
-    "Pengesahan data selesai & auto-isi borang permohonan!",
-  ];
-
-  const handleRunAiExtraction = async (preset?: ExtractedPreset) => {
-    setQualityErrorMessage(null);
-    let targetPreset = preset || activeExtractedPreset;
-
-    if (!targetPreset && (lcpFile || dwgFile)) {
-      const mainFile = lcpFile || dwgFile!;
-      const mainType = lcpFile ? "LCP" : "DWG";
-      try {
-        targetPreset = await parseOrGenerateCustomPreset(mainFile, mainType, lcpFile, dwgFile);
-      } catch {
-        targetPreset = createFastFallbackPreset(mainFile, mainType, lcpFile, dwgFile);
-      }
-    }
-
-    if (!targetPreset) {
-      targetPreset = SAMPLE_PRESETS[0];
-    }
-
-    setActiveExtractedPreset(targetPreset);
-    setIsProcessing(true);
-    setProgressStep(0);
-
-    let currentStep = 0;
-    const stepInterval = setInterval(() => {
-      currentStep += 1;
-      if (currentStep <= 3) {
-        setProgressStep(currentStep);
-      }
-      if (currentStep >= 3) {
-        clearInterval(stepInterval);
-        setIsProcessing(false);
-        setActiveExtractedPreset(targetPreset!);
-        onDataExtracted(targetPreset!.extractedData);
-      }
-    }, 250);
-  };
+  const [unextractedNotice, setUnextractedNotice] = useState<string | null>(null);
 
   const handleSelectPreset = (preset: ExtractedPreset) => {
     setActiveExtractedPreset(preset);
-    handleRunAiExtraction(preset);
+    setQualityErrorMessage(null);
+    setUnextractedNotice(null);
+    onDataExtracted(preset.extractedData);
   };
 
   const handleCustomUpload = async (type: "LCP" | "DWG", e: React.ChangeEvent<HTMLInputElement>) => {
     setQualityErrorMessage(null);
+    setUnextractedNotice(null);
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -720,9 +361,6 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     }
 
     // Pre-Upload PDF Quality Gate
-    let currentLcp = lcpFile;
-    let currentDwg = dwgFile;
-
     if (type === "LCP") {
       if (file.size === 0 || file.size < 1024) {
         setQualityErrorMessage(
@@ -730,22 +368,125 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
         );
         return;
       }
-      currentLcp = file;
       setLcpFile(file);
     } else {
-      currentDwg = file;
       setDwgFile(file);
     }
 
-    let customPreset: ExtractedPreset;
     try {
-      customPreset = await parseOrGenerateCustomPreset(file, type, currentLcp, currentDwg);
-    } catch {
-      customPreset = createFastFallbackPreset(file, type, currentLcp, currentDwg);
-    }
+      setIsProcessing(true);
+      setActiveExtractedPreset(null);
+      setProgressStageText("Memulakan draf permohonan & mengesahkan identiti...");
 
-    setActiveExtractedPreset(customPreset);
-    handleRunAiExtraction(customPreset);
+      // 1. Ensure Application Record Exists
+      let appId = applicationId;
+      if (!appId && onEnsureApplicationCreated) {
+        appId = await onEnsureApplicationCreated();
+      }
+
+      if (!appId) {
+        throw new Error("Gagal memperoleh ID permohonan untuk muat naik dokumen.");
+      }
+
+      const token = user ? await user.getIdToken() : "";
+
+      // 2. Upload Document via Real Backend Upload Endpoint
+      setProgressStageText("Memuat naik fail LCP ke pelayan simpanan Firestore & Cloud Storage...");
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      uploadFormData.append("documentType", type === "LCP" ? "LCP" : "SITE_PLAN");
+
+      const uploadRes = await fetch(`/api/applications/${appId}/documents`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: uploadFormData,
+      });
+
+      if (!uploadRes.ok) {
+        const errJson = await uploadRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Gagal memuat naik fail PDF ke pelayan backend.");
+      }
+
+      // 3. Trigger Asynchronous Real Backend AI Extraction Job
+      setProgressStageText("Enjin Document AI & Gemini 1.5 Pro sedang mengekstrak fakta perancangan...");
+      const processRes = await fetch(`/api/applications/${appId}/extraction/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ forceReprocess: true }),
+      });
+
+      if (!processRes.ok) {
+        const errJson = await processRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Gagal memulakan proses pengekstrakan LCP.");
+      }
+
+      // 4. Poll Extraction Job Status Until COMPLETED or FAILED
+      let attempts = 0;
+      let jobCompleted = false;
+      while (attempts < 25 && !jobCompleted) {
+        await new Promise((r) => setTimeout(r, 800));
+        attempts += 1;
+        setProgressStageText(`Enjin AI sedang mengekstrak jadual & parameter perancangan... (${(attempts * 0.8).toFixed(1)}s)`);
+
+        const statusRes = await fetch(`/api/applications/${appId}/extraction/status`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (statusData?.job?.status === "COMPLETED") {
+            jobCompleted = true;
+          } else if (statusData?.job?.status === "FAILED") {
+            throw new Error(statusData.job.errorMessage || "Pengekstrakan AI gagal di pelayan.");
+          }
+        }
+      }
+
+      // 5. Read Real Extracted Facts & Evidences
+      setProgressStageText("Memuatkan fakta perancangan diekstrak...");
+      const factsRes = await fetch(`/api/applications/${appId}/extraction`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!factsRes.ok) {
+        throw new Error("Gagal mengambil fakta perancangan yang diekstrak.");
+      }
+
+      const factsData = await factsRes.json();
+      const realFacts = (factsData.facts || []) as PlanningFact[];
+
+      // 6. Honest Zero-Fabrication Mapping
+      const { extractedData, unextractedKeys, unextractedNotice: notice } = mapRealFactsToApplication(realFacts);
+
+      setUnextractedNotice(notice || null);
+      setActiveExtractedPreset({
+        id: `real-${Date.now()}`,
+        name: file.name,
+        lcpFileName: file.name,
+        dwgFileName: dwgFile ? dwgFile.name : "Pelan_Susunatur.pdf",
+        lcpFileSize: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+        dwgFileSize: "0.00 MB",
+        highlights: [
+          `Pengekstrakan AI Backend: SELESAI`,
+          `Fakta Berkeyakinan: ${realFacts.filter((f) => f.confidenceLevel !== "LOW").length}`,
+          `Boleh Disunting: YA (Dicadangkan oleh AI)`,
+          notice ? `Perhatian: Medan Tidak Berkeyakinan Ditinggalkan Kosong` : `Status: 100% Berkeyakinan`,
+        ],
+        extractedData,
+      });
+
+      onDataExtracted(extractedData, notice);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Ralat pemprosesan pengekstrakan AI";
+      setQualityErrorMessage(msg);
+      setUnextractedNotice("Tidak dapat dikesan secara automatik — sila isi secara manual");
+      onDataExtracted({}, "Tidak dapat dikesan secara automatik — sila isi secara manual");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -757,32 +498,42 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-xs bg-gold-400/20 px-2 py-0.5 text-xs font-bold text-gold-300 border border-gold-400/40">
                 <Zap className="h-3.5 w-3.5" />
-                <span>Pengekstrakan Pintar AI</span>
+                <span>Pengekstrakan Pintar AI (Backend Pipeline Real)</span>
               </span>
               <span className="text-xs text-slate-300 font-medium">
-                • Tiada Pengisian Manual Diperlukan
+                • Semakan & Isian Beretika (Tiada Data Rekaan)
               </span>
             </div>
             <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <span>Muat Naik LCP (PDF) & Pelan Susunatur (DWG/CAD)</span>
             </h2>
             <p className="text-xs text-slate-300">
-              Enjin AI OSC SmartCheck membaca dokumen LCP dan fail CAD secara automatik untuk mengisi semua maklumat permohonan secara serta-merta.
+              Enjin Document AI & Gemini 1.5 Pro mengekstrak fakta rasmi daripada dokumen anda. Medan yang tidak pasti akan kekal kosong untuk diisi secara manual.
             </p>
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
             <span className="rounded-xs bg-emerald-500/20 border border-emerald-400/40 px-2.5 py-1 text-xs font-bold text-emerald-300 inline-flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <span>Autonomi AI Aktif</span>
+              <span>Integriti Data Terjamin</span>
             </span>
           </div>
         </div>
 
         {qualityErrorMessage && (
           <div className="rounded-sm border border-rose-500/50 bg-rose-950/80 p-3.5 text-xs text-rose-200 shadow-sm flex items-start gap-2.5">
-            <span className="font-bold text-rose-400 shrink-0">⚠️ AMARAN KUALITI DOKUMEN:</span>
+            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
             <span>{qualityErrorMessage}</span>
+          </div>
+        )}
+
+        {unextractedNotice && !qualityErrorMessage && (
+          <div className="rounded-sm border border-amber-500/50 bg-amber-950/70 p-3.5 text-xs text-amber-200 shadow-sm flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-amber-300">AMARAN PENGEKSTRAKAN: </span>
+              <span>{unextractedNotice}</span>
+            </div>
           </div>
         )}
 
@@ -805,7 +556,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                   {lcpFile
                     ? `Fail Dipilih: ${lcpFile.name} (${(lcpFile.size / 1024 / 1024).toFixed(2)} MB)`
                     : activeExtractedPreset
-                    ? `Contoh Aktif: ${activeExtractedPreset.lcpFileName} (${activeExtractedPreset.lcpFileSize})`
+                    ? `Dokumen Aktif: ${activeExtractedPreset.lcpFileName}`
                     : "Seret atau pilih fail LCP format PDF mengandungi maklumat pemohon & projek."}
                 </p>
                 <div className="pt-2 flex items-center gap-2">
@@ -817,6 +568,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                       accept=".pdf"
                       className="hidden"
                       onChange={(e) => handleCustomUpload("LCP", e)}
+                      disabled={isProcessing}
                     />
                   </label>
                   {(lcpFile || activeExtractedPreset) && (
@@ -846,7 +598,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                   {dwgFile
                     ? `Fail Dipilih: ${dwgFile.name} (${(dwgFile.size / 1024 / 1024).toFixed(2)} MB)`
                     : activeExtractedPreset
-                    ? `Contoh Aktif: ${activeExtractedPreset.dwgFileName} (${activeExtractedPreset.dwgFileSize})`
+                    ? `Dokumen Aktif: ${activeExtractedPreset.dwgFileName}`
                     : "Seret fail DWG / DXF untuk pengekstrakan lapisan zon, garisan anjakan & lot."}
                 </p>
                 <div className="pt-2 flex items-center gap-2">
@@ -858,6 +610,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                       accept=".dwg,.dxf,.pdf"
                       className="hidden"
                       onChange={(e) => handleCustomUpload("DWG", e)}
+                      disabled={isProcessing}
                     />
                   </label>
                   {(dwgFile || activeExtractedPreset) && (
@@ -871,13 +624,13 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
           </div>
         </div>
 
-        {/* 1-Click Sample Presets */}
+        {/* 1-Click Sample Presets (Presentation Demo Simulation) */}
         <div className="space-y-2 border-t border-gov-700/60 pt-3">
           <div className="flex items-center justify-between text-xs">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-              💡 Atau Pilih Contoh Pakej LCP & CAD Lengkap (1-Klik Auto-Isi):
+              💡 Atau Pilih Contoh Pakej LCP & CAD Lengkap (1-Klik Auto-Isi Demo):
             </span>
-            <span className="text-[10px] text-gold-300 font-semibold">Simulasi Serta-Merta</span>
+            <span className="text-[10px] text-gold-300 font-semibold">Simulasi Demo Sahaja</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -907,7 +660,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                   </div>
                   <div className="mt-2 pt-2 border-t border-gov-700/60 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
                     <Sparkles className="h-3 w-3" />
-                    <span>Klik Untuk Ekstrak AI</span>
+                    <span>Klik Untuk Simulasi Demo</span>
                   </div>
                 </button>
               );
@@ -915,24 +668,17 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
           </div>
         </div>
 
-        {/* Processing Indicator or Success Banner */}
+        {/* Real Processing Indicator or Success Banner */}
         {isProcessing ? (
           <div className="rounded-sm bg-gov-950/80 border border-gold-400/50 p-4 space-y-2.5 animate-pulse">
             <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-gold-400" />
+              <Loader2 className="h-5 w-5 animate-spin text-gold-400 shrink-0" />
               <div>
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Enjin Pengekstrakan AI Sedang Memproses Dokumen...
+                  Enjin Backend Document AI & Gemini Sedang Memproses Dokumen...
                 </h4>
-                <p className="text-xs text-gold-300">{processingSteps[progressStep]}</p>
+                <p className="text-xs text-gold-300">{progressStageText}</p>
               </div>
-            </div>
-            {/* Progress Bar */}
-            <div className="w-full bg-gov-800 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-gold-400 h-full transition-all duration-500"
-                style={{ width: `${((progressStep + 1) / 4) * 100}%` }}
-              />
             </div>
           </div>
         ) : activeExtractedPreset ? (
@@ -942,16 +688,13 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
                 <div>
                   <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
-                    Pengekstrakan AI Selesai — 100% Maklumat Borang Telah Diisi Automatik!
+                    Pengekstrakan AI Selesai — Borang Telah Diisi (Dicadangkan Oleh AI)
                   </h4>
                   <p className="text-xs text-slate-300">
-                    Data diekstrak daripada <b>{activeExtractedPreset.lcpFileName}</b> dan <b>{activeExtractedPreset.dwgFileName}</b> dengan tahap keyakinan <b>98.5%</b>.
+                    Data diekstrak daripada <b>{activeExtractedPreset.lcpFileName}</b> melalui pipeline backend rasmi. Sila semak setiap seksyen sebelum menghantar.
                   </p>
                 </div>
               </div>
-              <span className="rounded-xs bg-emerald-500/20 px-2.5 py-1 text-xs font-mono font-bold text-emerald-300 shrink-0">
-                Skor Ketepatan: 98.5%
-              </span>
             </div>
 
             {/* Extracted Entity Tags */}

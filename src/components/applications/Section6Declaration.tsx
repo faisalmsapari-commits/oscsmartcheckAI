@@ -30,23 +30,23 @@ export function Section6Declaration({
   const projectName =
     applicationData?.projectInfo?.projectName ||
     applicationData?.title ||
-    "Cadangan Pembangunan";
+    "[Tajuk Cadangan Belum Diisi]";
   const mukim =
     applicationData?.siteInfo?.mukim ||
     (applicationData?.siteInfo?.lots && applicationData.siteInfo.lots[0]?.mukim) ||
-    "Langkawi";
+    "[Mukim Belum Diisi]";
   const lotNumber =
     applicationData?.siteInfo?.lots && applicationData.siteInfo.lots[0]?.lotNumber
       ? applicationData.siteInfo.lots.map((l) => l.lotNumber).filter(Boolean).join(", ")
-      : "Lot Tapak";
+      : "[Nombor Lot Belum Diisi]";
   const devType =
     applicationData?.projectInfo?.developmentType ||
     applicationData?.developmentType ||
-    "KOMERSIAL";
+    "[Jenis Pembangunan Belum Diisi]";
   const plotRatio =
-    applicationData?.developmentParameters?.plotRatio || 1.5;
+    applicationData?.developmentParameters?.plotRatio;
   const parkingProvided =
-    applicationData?.developmentParameters?.parkingProvided || 120;
+    applicationData?.developmentParameters?.parkingProvided;
 
   return (
     <div className="space-y-6">
@@ -108,7 +108,7 @@ export function Section6Declaration({
               </span>
             </div>
             <div className="text-xs font-bold text-slate-100">
-              1:{plotRatio} (Had RTD: 1:2.0)
+              {plotRatio ? `1:${plotRatio} (Had RTD: 1:2.0)` : "Tidak dinyatakan"}
             </div>
             <p className="text-[11px] text-slate-300">
               Keluasan lantai kasar berada dalam had intensiti yang dibenarkan.
@@ -127,7 +127,7 @@ export function Section6Declaration({
               </span>
             </div>
             <div className="text-xs font-bold text-slate-100">
-              {parkingProvided} Petak Disediakan
+              {parkingProvided !== null && parkingProvided !== undefined ? `${parkingProvided} Petak Disediakan` : "Tidak dinyatakan"}
             </div>
             <p className="text-[11px] text-slate-300">
               Mematuhi standard piawaian perancangan tempat letak kenderaan & OKU.
