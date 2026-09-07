@@ -129,8 +129,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Validate MIME type
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    // Validate MIME type & CAD upload guardrail
+    const fileNameLower = file.name.toLowerCase();
+    if (fileNameLower.endsWith(".dwg") || fileNameLower.endsWith(".dxf")) {
+      return NextResponse.json(
+        {
+          code: "CAD_FILE_NOT_SUPPORTED_FOR_OCR",
+          error:
+            "Fail CAD (.dwg / .dxf) tidak boleh diproses secara terus oleh enjin OCR Document AI. Sila muat naik fail eksport Pelan Susunatur dalam format PDF untuk pengekstrakan AI.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (file.type !== "application/pdf" && !fileNameLower.endsWith(".pdf")) {
       return NextResponse.json(
         { code: "INVALID_FILE_TYPE", error: "Format fail tidak sah. Hanya fail PDF dibenarkan." },
         { status: 400 }

@@ -363,6 +363,14 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const nameLower = file.name.toLowerCase();
+    if (nameLower.endsWith(".dwg") || nameLower.endsWith(".dxf")) {
+      setQualityErrorMessage(
+        "Fail CAD (.dwg / .dxf) tidak boleh diproses secara terus oleh enjin OCR Document AI. Sila muat naik fail eksport Pelan Susunatur dalam format PDF untuk pengekstrakan AI."
+      );
+      return;
+    }
+
     // Pre-Upload PDF Quality Gate
     if (type === "LCP") {
       if (file.size === 0 || file.size < 1024) {

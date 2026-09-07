@@ -17,10 +17,65 @@ import {
 export const LCP_AI_PROMPT_VERSION = "v1.0.0-mp-lbp";
 export const LCP_AI_MODEL_NAME = "gemini-1.5-pro";
 
+/**
+ * Gemini 1.5 Pro Controlled JSON Response Schema (Inference-time structure enforcement)
+ */
+export const GEMINI_CONTROLLED_JSON_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    facts: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          key: { type: "STRING" },
+          label: { type: "STRING" },
+          category: { type: "STRING" },
+          rawValue: { type: "STRING", nullable: true },
+          rawUnit: { type: "STRING", nullable: true },
+          confidence: { type: "NUMBER" },
+          evidence: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                pageNumber: { type: "INTEGER" },
+                quotedText: { type: "STRING" },
+                tableReference: { type: "STRING", nullable: true },
+              },
+              required: ["pageNumber", "quotedText"],
+            },
+          },
+        },
+        required: ["key", "label", "category", "confidence"],
+      },
+    },
+  },
+  required: ["facts"],
+} as const;
+
+/**
+ * Gemini Request Generation Config enforcing application/json MIME type and responseSchema
+ */
+export const GEMINI_REQUEST_CONFIG = {
+  model: LCP_AI_MODEL_NAME,
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: GEMINI_CONTROLLED_JSON_SCHEMA,
+    temperature: 0.1,
+  },
+};
+
+export interface ExtractFactsOptions {
+  documentType?: string;
+  pageImages?: Array<{ pageNumber: number; mimeType: string; base64Data: string }>;
+}
+
 export interface ExtractionResult {
   facts: PlanningFact[];
   conflicts: FactConflict[];
   totalPages: number;
+  isMultimodal?: boolean;
 }
 
 /**
@@ -52,10 +107,16 @@ export function detectFactConflicts(facts: PlanningFact[]): FactConflict[] {
 export async function extractPlanningFactsFromDocument(
   doc: NormalizedDocument,
   applicationId: string,
-  documentVersion: number
+  documentVersion: number,
+  options?: ExtractFactsOptions
 ): Promise<ExtractionResult> {
   const facts: PlanningFact[] = [];
   const now = new Date().toISOString();
+
+  const docType = options?.documentType || "LCP";
+  const LAYOUT_DRIVEN_TYPES = ["SITE_PLAN", "LAYOUT_PLAN", "LOCATION_PLAN", "BUILDING_PLAN"];
+  const isLayoutDriven = LAYOUT_DRIVEN_TYPES.includes(docType);
+  const isMultimodalEnabled = Boolean(isLayoutDriven && options?.pageImages && options.pageImages.length > 0);
 
   // Helper to build and push fact
   const addFact = (
@@ -545,6 +606,7 @@ export async function extractPlanningFactsFromDocument(
     facts,
     conflicts,
     totalPages: doc.totalPages,
+    isMultimodal: isMultimodalEnabled,
   };
 }
 

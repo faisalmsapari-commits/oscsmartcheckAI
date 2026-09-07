@@ -220,7 +220,8 @@ export async function processLcpDocument(
     const extractionResult = await extractPlanningFactsFromDocument(
       normalizedDoc,
       applicationId,
-      document.version || 1
+      document.version || 1,
+      { documentType: document.documentType }
     );
 
     // STAGE 3: PERSISTENCE
