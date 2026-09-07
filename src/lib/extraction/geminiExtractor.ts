@@ -69,15 +69,25 @@ export async function extractPlanningFactsFromDocument(
     evidence: { pageNumber: number; quotedText: string; tableReference?: string | null }[]
   ) => {
     const isFound = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== "";
-    const isConflict = evidence.length > 1 && new Set(evidence.map((e) => e.quotedText)).size > 1;
+    const validEvidence = evidence.filter(
+      (e) => Boolean(e.pageNumber && e.pageNumber > 0 && e.quotedText && e.quotedText.trim() !== "")
+    );
+    const isConflict = validEvidence.length > 1 && new Set(validEvidence.map((e) => e.quotedText.trim())).size > 1;
+
+    let score = isFound ? Math.min(1.0, Math.max(0, confidence)) : 0;
+
+    // Strict Evidence Rule: If no valid source quote exists, cap score below 0.9 and forbid HIGH confidence
+    if (validEvidence.length === 0 && isFound) {
+      score = Math.min(score, 0.89);
+    }
 
     let confLevel: ConfidenceLevel = "LOW";
-    if (confidence >= 0.9) confLevel = "HIGH";
-    else if (confidence >= 0.7) confLevel = "MEDIUM";
-
-    // If no source evidence exists, confidence cannot be HIGH
-    if (evidence.length === 0 && confLevel === "HIGH") {
+    if (isFound && score >= 0.9 && validEvidence.length > 0) {
+      confLevel = "HIGH";
+    } else if (isFound && score >= 0.7) {
       confLevel = "MEDIUM";
+    } else {
+      confLevel = "LOW";
     }
 
     const normalized = isFound ? normalizer(rawValue) : null;
@@ -94,13 +104,13 @@ export async function extractPlanningFactsFromDocument(
       unit: normalizeUnitText(rawUnit),
       normalizedValue: normalized,
       status: isConflict ? "CONFLICT" : isFound ? "EXTRACTED" : "NOT_FOUND",
-      confidence: isFound ? confidence : 0,
-      confidenceLevel: isFound ? confLevel : "LOW",
-      sourceEvidence: evidence.map((e) => ({
+      confidence: score,
+      confidenceLevel: confLevel,
+      sourceEvidence: validEvidence.map((e) => ({
         documentId: doc.documentId,
         documentVersion,
         pageNumber: e.pageNumber,
-        quotedText: e.quotedText,
+        quotedText: e.quotedText.trim(),
         tableReference: e.tableReference || null,
       })),
       aiGenerated: true,
