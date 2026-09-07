@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/unit/*.test.mjs",
+    "test": "node --experimental-strip-types --test tests/unit/*.test.mjs",
     "emulators": "firebase emulators:start"
   },
   "dependencies": {
