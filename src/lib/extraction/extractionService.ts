@@ -420,10 +420,12 @@ export async function correctExtractedFact(
   }
 
   const factData = snap.data() as PlanningFact;
+  const originalAiValue = factData.originalAiValue ?? factData.value;
 
   await factRef.update({
     status: "MANUALLY_CORRECTED",
     confirmedValue: correctedValue,
+    originalAiValue,
     confirmedBy: officerUid,
     confirmedAt: FieldValue.serverTimestamp(),
     rejectionReason: reason || null,
@@ -441,7 +443,7 @@ export async function correctExtractedFact(
     timestamp: FieldValue.serverTimestamp(),
     metadata: {
       key: factData.key,
-      originalAiValue: factData.value,
+      originalAiValue,
       correctedValue,
       reason,
     },

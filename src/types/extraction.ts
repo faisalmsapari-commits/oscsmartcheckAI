@@ -85,6 +85,7 @@ export interface PlanningFact<T = unknown> {
   sourceEvidence: FactEvidence[];
   evidenceVerified?: boolean;
   aiGenerated: boolean;
+  originalAiValue?: T | null;
   confirmedValue: T | null;
   confirmedBy: string | null;
   confirmedAt: Timestamp | string | null;
