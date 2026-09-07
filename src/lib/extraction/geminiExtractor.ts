@@ -181,7 +181,7 @@ ${doc.pages.map((p) => `--- PAGE ${p.pageNumber} ---\n${p.text}`).join("\n\n")}`
         category: (f.category as FactCategory) || "SITE",
         value: isFound ? f.rawValue : null,
         unit: normalizeUnitText(f.rawUnit || null),
-        normalizedValue: isFound ? f.rawValue : null,
+        normalizedValue: (isFound ? f.rawValue : null) as string | number | boolean | null,
         status: isFound ? "EXTRACTED" : "NOT_FOUND",
         confidence: conf,
         confidenceLevel: conf >= 0.9 ? "HIGH" : conf >= 0.7 ? "MEDIUM" : "LOW",
@@ -206,6 +206,184 @@ ${doc.pages.map((p) => `--- PAGE ${p.pageNumber} ---\n${p.text}`).join("\n\n")}`
   }
 }
 
+const STANDARD_FACT_DEFS: Array<{
+  key: string;
+  label: string;
+  category: FactCategory;
+  normalizer: (val: unknown) => number | string | boolean | null;
+  unit: string | null;
+  regexList: RegExp[];
+}> = [
+  {
+    key: "projectTitle",
+    label: "Tajuk Projek Cadangan",
+    category: "PROJECT",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/TAJUK CADANGAN:\s*([^\n]+)/i, /CADANGAN PEMBANGUNAN\s+([^\n]+)/i],
+  },
+  {
+    key: "developmentType",
+    label: "Jenis Pembangunan Utama",
+    category: "PROJECT",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/Guna Tanah Dicadangkan:\s*([^\n]+)/i, /(HOTEL|PERUMAHAN|PERNIAGAAN|KOMERSIAL)/i],
+  },
+  {
+    key: "applicantName",
+    label: "Nama Pemaju / Pemohon",
+    category: "PROJECT",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/PEMOHON(?:\s*\/\s*PEMAJU)?:\s*([^\n]+)/i],
+  },
+  {
+    key: "consultantName",
+    label: "Jururancang Bandar / PSP",
+    category: "PROJECT",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/JURURANCANG BANDAR:\s*([^\n]+)/i],
+  },
+  {
+    key: "lotNumber",
+    label: "Nombor Lot Tanah",
+    category: "SITE",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/Nombor Lot:\s*(Lot\s*\d+)/i, /(Lot\s*\d+)/i],
+  },
+  {
+    key: "mukim",
+    label: "Mukim",
+    category: "SITE",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/Mukim:\s*([A-Za-z]+)/i, /Mukim\s+([A-Za-z]+)/i],
+  },
+  {
+    key: "district",
+    label: "Daerah",
+    category: "SITE",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/Daerah:\s*([A-Za-z]+)/i, /Daerah\s+([A-Za-z]+)/i],
+  },
+  {
+    key: "siteAreaSqm",
+    label: "Keluasan Tapak",
+    category: "SITE",
+    normalizer: normalizeArea,
+    unit: "m²",
+    regexList: [/Keluasan Tapak:\s*([\d,.]+)\s*(m²|Hektar)?/i],
+  },
+  {
+    key: "proposedLandUse",
+    label: "Guna Tanah Dicadangkan",
+    category: "LAND_USE",
+    normalizer: (v) => (v ? String(v) : null),
+    unit: null,
+    regexList: [/Guna Tanah Dicadangkan:\s*([^\n]+)/i],
+  },
+  {
+    key: "grossFloorAreaSqm",
+    label: "Jumlah Keluasan Lantai Kasar (GFA)",
+    category: "INTENSITY",
+    normalizer: normalizeArea,
+    unit: "m²",
+    regexList: [/Keluasan Lantai Kasar(?:\s*\(GFA\))?:\s*([\d,.]+)/i],
+  },
+  {
+    key: "plotRatio",
+    label: "Nisbah Plot",
+    category: "INTENSITY",
+    normalizer: normalizePlotRatio,
+    unit: null,
+    regexList: [/Nisbah Plot(?:\s*\(Plot Ratio\))?:\s*(?:1:)?([\d.]+)/i],
+  },
+  {
+    key: "buildingCoveragePercent",
+    label: "Liputan Bangunan (Plinth Area %)",
+    category: "INTENSITY",
+    normalizer: normalizePercentage,
+    unit: "%",
+    regexList: [/Liputan Bangunan(?:\s*\(Plinth Area\))?:\s*([\d.]+)%/i],
+  },
+  {
+    key: "numberOfFloors",
+    label: "Bilangan Tingkat Maksimum",
+    category: "BUILDING",
+    normalizer: normalizeInteger,
+    unit: "Tingkat",
+    regexList: [/Ketinggian(?:\s*Bangunan)?:\s*(\d+)\s*Tingkat/i],
+  },
+  {
+    key: "maximumBuildingHeightMeters",
+    label: "Ketinggian Bangunan",
+    category: "BUILDING",
+    normalizer: normalizeDistance,
+    unit: "m",
+    regexList: [/\(([\d.]+)\s*meter\)/i, /Ketinggian.*:\s*([\d.]+)\s*m/i],
+  },
+  {
+    key: "carParkingProvided",
+    label: "Tempat Letak Kereta (Petak)",
+    category: "PARKING",
+    normalizer: normalizeInteger,
+    unit: "petak",
+    regexList: [/(?:Jumlah )?Tempat Letak Kereta[^\n]*:\s*(\d+)[^\n]*/i],
+  },
+  {
+    key: "motorcycleParkingProvided",
+    label: "Tempat Letak Motosikal (Petak)",
+    category: "PARKING",
+    normalizer: normalizeInteger,
+    unit: "petak",
+    regexList: [/(?:Jumlah )?Tempat Letak Motosikal[^\n]*:\s*(\d+)[^\n]*/i],
+  },
+  {
+    key: "disabledParkingProvided",
+    label: "Tempat Letak Kereta OKU",
+    category: "PARKING",
+    normalizer: normalizeInteger,
+    unit: "petak",
+    regexList: [/(?:Jumlah )?Tempat Letak (?:Kereta )?OKU[^\n]*:\s*(\d+)[^\n]*/i],
+  },
+  {
+    key: "openSpaceAreaSqm",
+    label: "Kawasan Lapang (m²)",
+    category: "OPEN_SPACE",
+    normalizer: normalizeArea,
+    unit: "m²",
+    regexList: [/Kawasan Lapang.*:\s*([\d,.]+)\s*m²/i],
+  },
+  {
+    key: "openSpacePercent",
+    label: "Peratusan Kawasan Lapang (%)",
+    category: "OPEN_SPACE",
+    normalizer: normalizePercentage,
+    unit: "%",
+    regexList: [/Kawasan Lapang.*:\s*[\d,. ]+m²\s*\(([\d.]+)%\)/i],
+  },
+  {
+    key: "totalResidentialUnits",
+    label: "Jumlah Unit Kediaman",
+    category: "HOUSING",
+    normalizer: normalizeInteger,
+    unit: "unit",
+    regexList: [/Jumlah Unit Kediaman:\s*(\d+)/i, /(\d+)\s*UNIT RUMAH TERES/i],
+  },
+  {
+    key: "hotelRooms",
+    label: "Jumlah Bilik Hotel",
+    category: "BUILDING",
+    normalizer: normalizeInteger,
+    unit: "bilik",
+    regexList: [/Jumlah Bilik Hotel:\s*(\d+)/i, /(\d+)\s*bilik hotel/i],
+  },
+];
+
 /**
  * Dynamic regex-based text extraction for offline mode
  */
@@ -222,106 +400,33 @@ function extractFactsFromDocumentText(
     evidence: { pageNumber: number; quotedText: string; tableReference?: string | null }[]
   ) => void
 ) {
+  const extractedKeys = new Set<string>();
+
   for (const page of doc.pages) {
     const text = page.text;
     const pageNum = page.pageNumber;
 
-    const lotMatch = text.match(/(?:Nombor Lot|Lot)\s*:\s*(Lot\s*\d+)/i) || text.match(/(Lot\s*\d+)/i);
-    if (lotMatch) {
-      addFact("lotNumber", "Nombor Lot Tanah", "SITE", lotMatch[1], null, (v) => String(v), 0.95, [
-        { pageNumber: pageNum, quotedText: lotMatch[0] },
-      ]);
-    }
+    for (const def of STANDARD_FACT_DEFS) {
+      if (extractedKeys.has(def.key)) continue;
 
-    const mukimMatch = text.match(/Mukim\s*:\s*([A-Za-z]+)/i) || text.match(/Mukim\s+([A-Za-z]+)/i);
-    if (mukimMatch) {
-      addFact("mukim", "Mukim", "SITE", mukimMatch[1], null, (v) => String(v), 0.95, [
-        { pageNumber: pageNum, quotedText: mukimMatch[0] },
-      ]);
+      for (const rx of def.regexList) {
+        const match = text.match(rx);
+        if (match) {
+          const rawVal = match[1] || match[0];
+          extractedKeys.add(def.key);
+          addFact(def.key, def.label, def.category, rawVal, def.unit, def.normalizer, 0.95, [
+            { pageNumber: pageNum, quotedText: match[0] },
+          ]);
+          break;
+        }
+      }
     }
+  }
 
-    const distMatch = text.match(/Daerah\s*:\s*([A-Za-z]+)/i) || text.match(/Daerah\s+([A-Za-z]+)/i);
-    if (distMatch) {
-      addFact("district", "Daerah", "SITE", distMatch[1], null, (v) => String(v), 0.95, [
-        { pageNumber: pageNum, quotedText: distMatch[0] },
-      ]);
-    }
-
-    const siteAreaMatch = text.match(/Keluasan Tapak\s*:\s*([\d,.]+)\s*(m²|Hektar)?/i);
-    if (siteAreaMatch) {
-      addFact("siteAreaSqm", "Keluasan Tapak", "SITE", siteAreaMatch[1], siteAreaMatch[2] || "m²", normalizeArea, 0.95, [
-        { pageNumber: pageNum, quotedText: siteAreaMatch[0] },
-      ]);
-    }
-
-    const gfaMatch = text.match(/Keluasan Lantai Kasar(?:\s*\(GFA\))?\s*:\s*([\d,.]+)/i);
-    if (gfaMatch) {
-      addFact("grossFloorAreaSqm", "Jumlah GFA", "INTENSITY", gfaMatch[1], "m²", normalizeArea, 0.95, [
-        { pageNumber: pageNum, quotedText: gfaMatch[0] },
-      ]);
-    }
-
-    const prMatch = text.match(/Nisbah Plot(?:\s*\(Plot Ratio\))?\s*:\s*(?:1:)?([\d.]+)/i);
-    if (prMatch) {
-      addFact("plotRatio", "Nisbah Plot", "INTENSITY", prMatch[1], null, normalizePlotRatio, 0.95, [
-        { pageNumber: pageNum, quotedText: prMatch[0] },
-      ]);
-    }
-
-    const bcMatch = text.match(/Liputan Bangunan(?:\s*\(Plinth Area\))?\s*:\s*([\d.]+)%/i);
-    if (bcMatch) {
-      addFact("buildingCoveragePercent", "Liputan Bangunan", "INTENSITY", bcMatch[1], "%", normalizePercentage, 0.95, [
-        { pageNumber: pageNum, quotedText: bcMatch[0] },
-      ]);
-    }
-
-    const floorMatch = text.match(/Ketinggian(?:\s*Bangunan)?\s*:\s*(\d+)\s*Tingkat/i);
-    if (floorMatch) {
-      addFact("numberOfFloors", "Jumlah Tingkat", "BUILDING", floorMatch[1], "Tingkat", normalizeInteger, 0.95, [
-        { pageNumber: pageNum, quotedText: floorMatch[0] },
-      ]);
-    }
-
-    const heightMatch = text.match(/\(([\d.]+)\s*meter\)/i) || text.match(/Ketinggian.*:\s*([\d.]+)\s*m/i);
-    if (heightMatch) {
-      addFact("maximumBuildingHeightMeters", "Ketinggian Bangunan", "BUILDING", heightMatch[1], "m", normalizeDistance, 0.95, [
-        { pageNumber: pageNum, quotedText: heightMatch[0] },
-      ]);
-    }
-
-    const carMatch = text.match(/Tempat Letak Kereta\s*:\s*(\d+)/i);
-    if (carMatch) {
-      addFact("carParkingProvided", "Petak Kereta", "PARKING", carMatch[1], "petak", normalizeInteger, 0.95, [
-        { pageNumber: pageNum, quotedText: carMatch[0] },
-      ]);
-    }
-
-    const motoMatch = text.match(/Tempat Letak Motosikal\s*:\s*(\d+)/i);
-    if (motoMatch) {
-      addFact("motorcycleParkingProvided", "Petak Motosikal", "PARKING", motoMatch[1], "petak", normalizeInteger, 0.95, [
-        { pageNumber: pageNum, quotedText: motoMatch[0] },
-      ]);
-    }
-
-    const okuMatch = text.match(/Tempat Letak OKU\s*:\s*(\d+)/i);
-    if (okuMatch) {
-      addFact("disabledParkingProvided", "Petak OKU", "PARKING", okuMatch[1], "petak", normalizeInteger, 0.95, [
-        { pageNumber: pageNum, quotedText: okuMatch[0] },
-      ]);
-    }
-
-    const openSpaceMatch = text.match(/Kawasan Lapang\s*:\s*([\d,.]+)\s*m²/i);
-    if (openSpaceMatch) {
-      addFact("openSpaceAreaSqm", "Kawasan Lapang", "OPEN_SPACE", openSpaceMatch[1], "m²", normalizeArea, 0.95, [
-        { pageNumber: pageNum, quotedText: openSpaceMatch[0] },
-      ]);
-    }
-
-    const openSpacePctMatch = text.match(/Kawasan Lapang.*:\s*[\d,. ]+m²\s*\(([\d.]+)%\)/i);
-    if (openSpacePctMatch) {
-      addFact("openSpacePercent", "Peratus Kawasan Lapang", "OPEN_SPACE", openSpacePctMatch[1], "%", normalizePercentage, 0.95, [
-        { pageNumber: pageNum, quotedText: openSpacePctMatch[0] },
-      ]);
+  // Populate any unextracted required/standard keys with status NOT_FOUND and confidence 0
+  for (const def of STANDARD_FACT_DEFS) {
+    if (!extractedKeys.has(def.key)) {
+      addFact(def.key, def.label, def.category, null, def.unit, def.normalizer, 0, []);
     }
   }
 }

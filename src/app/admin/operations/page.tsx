@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
-  Activity,
   Server,
   Database,
   Cpu,
@@ -200,10 +199,6 @@ export default function AdminOperationsPage() {
                 </div>
               </div>
             </Card>
-          </div>
-        </div>
-      </AppShell>
-    </ProtectedRoute>
           </div>
         </div>
       </AppShell>
