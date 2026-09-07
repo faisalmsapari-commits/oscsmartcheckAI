@@ -157,6 +157,8 @@ export interface NormalizedDocument {
   totalPages: number;
   pages: NormalizedPage[];
   rawTextLength: number;
+  qualityStatus?: "OK" | "LOW_QUALITY_SCAN";
+  qualityWarning?: string | null;
 }
 
 /**

@@ -155,12 +155,18 @@ export class DevelopmentDocumentAIProcessor implements DocumentProcessor {
     const totalPages = SAMPLE_LCP_FIXTURE_PAGES.length;
     const rawTextLength = SAMPLE_LCP_FIXTURE_PAGES.reduce((acc, p) => acc + p.text.length, 0);
 
-    return {
+    const docResult: NormalizedDocument = {
       documentId: params.documentId,
       totalPages,
       pages: SAMPLE_LCP_FIXTURE_PAGES,
       rawTextLength,
     };
+
+    const qualityCheck = validateDocumentScanQuality(docResult);
+    docResult.qualityStatus = qualityCheck.qualityStatus;
+    docResult.qualityWarning = qualityCheck.qualityWarning;
+
+    return docResult;
   }
 }
 
@@ -289,18 +295,53 @@ export class GoogleDocumentAIProcessor implements DocumentProcessor {
         };
       });
 
-      return {
+      const docResult: NormalizedDocument = {
         documentId: params.documentId,
         totalPages: pages.length,
         pages,
         rawTextLength: fullText.length,
       };
+
+      const qualityCheck = validateDocumentScanQuality(docResult);
+      docResult.qualityStatus = qualityCheck.qualityStatus;
+      docResult.qualityWarning = qualityCheck.qualityWarning;
+
+      return docResult;
     } catch (err: unknown) {
       captureAiPipelineError(err, params.documentId, params.applicationId);
       const devProcessor = new DevelopmentDocumentAIProcessor();
       return await devProcessor.processDocument(params);
     }
   }
+}
+
+/**
+ * Evaluates document scan quality based on text density per page.
+ * Flags image-only or low-resolution scans where extractable text length per page is near zero (< 50 chars).
+ */
+export function validateDocumentScanQuality(doc: NormalizedDocument): {
+  valid: boolean;
+  qualityStatus: "OK" | "LOW_QUALITY_SCAN";
+  qualityWarning: string | null;
+} {
+  const totalPages = doc.totalPages || doc.pages?.length || 1;
+  const rawText = doc.rawTextLength ?? doc.pages?.map((p) => p.text).join("").length ?? 0;
+  const avgTextLengthPerPage = rawText / totalPages;
+
+  if (avgTextLengthPerPage < 50) {
+    return {
+      valid: false,
+      qualityStatus: "LOW_QUALITY_SCAN",
+      qualityWarning:
+        "Amaran: Kualiti imbasan dokumen ini sangat rendah (imbasan gambaran tanpa lapisan teks yang jelas). Sila muat naik semula pelan dengan kualiti imbasan yang lebih jelas.",
+    };
+  }
+
+  return {
+    valid: true,
+    qualityStatus: "OK",
+    qualityWarning: null,
+  };
 }
 
 /**
