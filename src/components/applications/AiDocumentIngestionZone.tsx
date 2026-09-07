@@ -319,9 +319,15 @@ async function parseOrGenerateCustomPreset(
   currentLcp: File | null,
   currentDwg: File | null
 ): Promise<ExtractedPreset> {
-  const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : "Pelan_Cadangan_LCP.pdf";
-  const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : "Pelan_Susunatur_Eksport.pdf";
-  const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ");
+  const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : file.name;
+  const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : `Pelan_CAD_${file.name.replace(/\.(pdf|dwg|dxf)$/i, "")}.dwg`;
+  const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ").trim();
+
+  const cleanNameUpper = cleanName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.toUpperCase())
+    .join(" ");
 
   const lcpSize = type === "LCP" ? file.size : currentLcp?.size || 4500000;
   const dwgSize = type === "DWG" ? file.size : currentDwg?.size || 12000000;
@@ -389,11 +395,12 @@ async function parseOrGenerateCustomPreset(
   const gfa = Math.round(siteAreaSqm * plotRatio);
   const buildingFootprintSqm = Math.round(siteAreaSqm * (siteCoveragePercent / 100));
 
-  const projRefCode = cleanName.slice(0, 5).toUpperCase().replace(/[^A-Z0-9]/g, "X") || "LCP";
+  const projRefCode = cleanNameUpper.slice(0, 6).replace(/[^A-Z0-9]/g, "X") || "LCP";
+  const appTitle = `Cadangan Pembangunan ${cleanNameUpper}`;
 
   return {
     id: `custom-${Date.now()}`,
-    name: `Cadangan Pembangunan (${cleanName})`,
+    name: appTitle,
     lcpFileName,
     dwgFileName,
     lcpFileSize: `${(lcpSize / 1024 / 1024).toFixed(2)} MB`,
@@ -405,16 +412,16 @@ async function parseOrGenerateCustomPreset(
       `Perunding: ${pspName.slice(0, 25)}`,
     ],
     extractedData: {
-      title: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
+      title: appTitle,
       applicationType: "Kebenaran Merancang",
       planningApplicationCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
-      submissionTitle: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
-      projectReference: `PRJ/2026/${projRefCode}-${absHash % 89 + 10}`,
+      submissionTitle: appTitle,
+      projectReference: `PRJ/2026/${projRefCode}-${(absHash % 89) + 10}`,
       developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
       applicantInfo: {
-        applicantName: `Pemohon (${cleanName})`,
+        applicantName: `Pemohon ${cleanNameUpper}`,
         applicantType: "COMPANY",
-        companyName: `Syarikat Pemajuan ${cleanName} Sdn Bhd`,
+        companyName: `Syarikat Pemajuan ${cleanNameUpper} Sdn Bhd`,
         registrationNumber: `202401${(absHash % 899999) + 100000} (${(absHash % 899999) + 100000}-P)`,
         email: `info@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "pemajuan"}.com.my`,
         phone: "+604-9669900",
@@ -422,16 +429,16 @@ async function parseOrGenerateCustomPreset(
       },
       consultantInfo: {
         principalSubmittingPerson: pspName,
-        consultantCompany: `Perunding Arkitek ${cleanName} Sdn Bhd`,
+        consultantCompany: `Perunding Arkitek ${cleanNameUpper} Sdn Bhd`,
         professionalRegistrationNo: lamNo,
         email: `arkitek@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "perunding"}.com.my`,
         phone: "+604-9668811",
       },
       projectInfo: {
-        projectName: `Cadangan Pembangunan Perancangan (${cleanName})`,
+        projectName: appTitle,
         developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
         developmentSubtype: totalDevelopmentUnits > 70 ? "Pangsapuri / Rumah Teres" : "Kompleks Komersial & Kedai",
-        developmentDescription: `Cadangan membina pembangunan ${cleanName} di atas ${lotNumber}, Mukim ${mukim}, Langkawi.`,
+        developmentDescription: `Cadangan membina pembangunan ${cleanNameUpper} di atas ${lotNumber}, Mukim ${mukim}, Langkawi.`,
         developmentCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
         proposedUse: totalDevelopmentUnits > 70 ? "Perumahan & Kediaman" : "Perniagaan & Komersial",
         existingUse: "Tanah Kosong / Belukar",
@@ -449,7 +456,7 @@ async function parseOrGenerateCustomPreset(
         mukim,
         district: "Langkawi",
         state: "Kedah",
-        siteAddress: `Tapak Cadangan (${cleanName}), ${lotNumber}, Mukim ${mukim}, 07000 Langkawi, Kedah`,
+        siteAddress: `Tapak Cadangan (${cleanNameUpper}), ${lotNumber}, Mukim ${mukim}, 07000 Langkawi, Kedah`,
         siteArea: {
           originalValue: siteAreaSqm,
           originalUnit: "SQM",
@@ -507,9 +514,21 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     "Pengesahan data selesai & auto-isi borang permohonan!",
   ];
 
-  const handleRunAiExtraction = (preset?: ExtractedPreset) => {
+  const handleRunAiExtraction = async (preset?: ExtractedPreset) => {
     setQualityErrorMessage(null);
-    const targetPreset = preset || activeExtractedPreset || SAMPLE_PRESETS[0];
+    let targetPreset = preset || activeExtractedPreset;
+
+    if (!targetPreset && (lcpFile || dwgFile)) {
+      const mainFile = lcpFile || dwgFile!;
+      const mainType = lcpFile ? "LCP" : "DWG";
+      targetPreset = await parseOrGenerateCustomPreset(mainFile, mainType, lcpFile, dwgFile);
+    }
+
+    if (!targetPreset) {
+      targetPreset = SAMPLE_PRESETS[0];
+    }
+
+    setActiveExtractedPreset(targetPreset);
     setIsProcessing(true);
     setProgressStep(0);
 
@@ -522,8 +541,8 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
       if (currentStep >= 3) {
         clearInterval(stepInterval);
         setIsProcessing(false);
-        setActiveExtractedPreset(targetPreset);
-        onDataExtracted(targetPreset.extractedData);
+        setActiveExtractedPreset(targetPreset!);
+        onDataExtracted(targetPreset!.extractedData);
       }
     }, 250);
   };
@@ -565,6 +584,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     }
 
     const customPreset = await parseOrGenerateCustomPreset(file, type, currentLcp, currentDwg);
+    setActiveExtractedPreset(customPreset);
     handleRunAiExtraction(customPreset);
   };
 
