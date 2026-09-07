@@ -1,5 +1,6 @@
 import type { NormalizedDocument, NormalizedPage } from "../../types/extraction.ts";
 import { getAdminStorage } from "../firebase/admin.ts";
+import { captureAiPipelineError } from "../observability/errorTracker.ts";
 
 export interface ProcessDocumentParams {
   storagePath: string;
@@ -237,7 +238,7 @@ export class GoogleDocumentAIProcessor implements DocumentProcessor {
         rawTextLength: fullText.length,
       };
     } catch (err: unknown) {
-      console.warn("Document AI live invocation fallback to Development processor:", err);
+      captureAiPipelineError(err, params.documentId, params.applicationId);
       const devProcessor = new DevelopmentDocumentAIProcessor();
       return await devProcessor.processDocument(params);
     }

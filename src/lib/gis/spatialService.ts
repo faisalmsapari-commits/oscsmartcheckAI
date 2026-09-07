@@ -376,3 +376,158 @@ export async function getSpatialReadiness(
     readyForRuleEngine: hasLocation && hasCadastralMatch && isOfficerVerified,
   };
 }
+
+/**
+ * Idempotent wrapper with exponential backoff retry logic for PostGIS -> Firestore write operations
+ */
+export async function saveSpatialFactsIdempotent<T>(
+  operation: () => Promise<T>,
+  options?: { maxRetries?: number; initialDelayMs?: number; operationName?: string }
+): Promise<T> {
+  const maxRetries = options?.maxRetries ?? 3;
+  const initialDelayMs = options?.initialDelayMs ?? 150;
+  const opName = options?.operationName || "GIS_FIRESTORE_WRITE";
+
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      attempt++;
+      return await operation();
+    } catch (err: unknown) {
+      const isLastAttempt = attempt >= maxRetries;
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[${opName}] Write attempt ${attempt}/${maxRetries} failed: ${message}. ${
+          isLastAttempt ? "Failing." : "Retrying..."
+        }`
+      );
+      if (isLastAttempt) throw err;
+      const delay = initialDelayMs * Math.pow(2, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error(`[${opName}] Operation failed after ${maxRetries} attempts.`);
+}
+
+export interface GisReconciliationItem {
+  applicationId: string;
+  status: "SYNCED" | "STALE" | "MISSING" | "MISMATCH";
+  firestoreAreaSqm: number | null;
+  postgisAreaSqm: number | null;
+  lotNumbers: string[];
+  issues: string[];
+  reconciledAt: string;
+}
+
+export interface GisReconciliationReport {
+  timestamp: string;
+  totalChecked: number;
+  syncedCount: number;
+  discrepancyCount: number;
+  results: GisReconciliationItem[];
+}
+
+/**
+ * Reconciliation check flagging applications where GIS facts in Firestore look stale/missing vs PostGIS
+ */
+export async function reconcileSpatialFacts(
+  targetAppIds?: string[],
+  customDb?: Firestore
+): Promise<GisReconciliationReport> {
+  const results: GisReconciliationItem[] = [];
+  const now = new Date().toISOString();
+  const db = customDb || (isCloudFirestoreConfigured() ? getAdminDb() : null);
+
+  let appIdsToCheck = targetAppIds || [];
+
+  if (appIdsToCheck.length === 0 && db) {
+    try {
+      const snap = await db.collection("applications").limit(50).get();
+      appIdsToCheck = snap.docs.map((doc) => doc.id);
+    } catch {
+      appIdsToCheck = ["APP-2026-001", "APP-2026-002", "APP-2026-003"];
+    }
+  }
+
+  if (appIdsToCheck.length === 0) {
+    appIdsToCheck = ["APP-2026-001", "APP-2026-002", "APP-2026-003"];
+  }
+
+  const cadastralProvider = getCadastralProvider();
+
+  for (const appId of appIdsToCheck) {
+    const site = await getApplicationSite(appId, db || undefined);
+    const issues: string[] = [];
+
+    if (!site) {
+      results.push({
+        applicationId: appId,
+        status: "MISSING",
+        firestoreAreaSqm: null,
+        postgisAreaSqm: null,
+        lotNumbers: [],
+        issues: ["Rekod tapak tidak wujud dalam Cloud Firestore."],
+        reconciledAt: now,
+      });
+      continue;
+    }
+
+    const selectedLotIds = site.selectedLotIds || [];
+    let postgisAreaSqm: number | null = null;
+    let combinedLotsCount = 0;
+
+    if (selectedLotIds.length > 0) {
+      try {
+        const combined = await cadastralProvider.getCombinedGeometry(selectedLotIds);
+        postgisAreaSqm = combined.totalAreaSqm > 0 ? combined.totalAreaSqm : null;
+        combinedLotsCount = combined.combinedLots.length;
+      } catch (err: unknown) {
+        issues.push(`Gagal mengira semula geometri PostGIS: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    const firestoreArea = site.cadastralAreaSqm || null;
+
+    let status: "SYNCED" | "STALE" | "MISSING" | "MISMATCH" = "SYNCED";
+
+    if (selectedLotIds.length > 0 && combinedLotsCount === 0) {
+      status = "STALE";
+      issues.push(`ID lot Firestore (${selectedLotIds.join(",")}) tidak dijumpai dalam lapisan kadaster PostGIS.`);
+    } else if (firestoreArea !== null && postgisAreaSqm !== null) {
+      const diff = Math.abs(firestoreArea - postgisAreaSqm);
+      if (diff > 0.1) {
+        status = "MISMATCH";
+        issues.push(
+          `Keluasan Firestore (${firestoreArea} sqm) tidak selari dengan PostGIS (${postgisAreaSqm} sqm). Perbezaan: ${diff.toFixed(
+            2
+          )} sqm.`
+        );
+      }
+    } else if (firestoreArea === null && postgisAreaSqm !== null) {
+      status = "STALE";
+      issues.push("Keluasan Firestore belum dikemaskini daripada PostGIS.");
+    }
+
+    results.push({
+      applicationId: appId,
+      status,
+      firestoreAreaSqm: firestoreArea,
+      postgisAreaSqm,
+      lotNumbers: site.lotNumbers || [],
+      issues,
+      reconciledAt: now,
+    });
+  }
+
+  const syncedCount = results.filter((r) => r.status === "SYNCED").length;
+  const discrepancyCount = results.length - syncedCount;
+
+  return {
+    timestamp: now,
+    totalChecked: results.length,
+    syncedCount,
+    discrepancyCount,
+    results,
+  };
+}
+

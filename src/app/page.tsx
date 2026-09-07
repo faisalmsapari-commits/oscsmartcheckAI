@@ -68,7 +68,7 @@ export default function HomePage() {
               </div>
               <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
                 <Lock className="h-3.5 w-3.5 text-gold-300" />
-                <span>Pengesahan dwi-faktor & peranan terhad</span>
+                <span>Pengesahan peranan terhad (RBAC) & 2FA (Akan Datang)</span>
               </div>
             </div>
           </div>
