@@ -1,101 +1,70 @@
-# Document AI Processor Configuration & Custom Document Extractor Training Guide
+# Document AI Processor Configuration & Extraction Accuracy Documentation
 
-**Document Version:** 1.0.0  
-**Target Platform:** Google Cloud Document AI Workbench  
+**Document Version:** 2.0.0  
+**Target Platform:** Google Cloud Document AI & Gemini 1.5 Pro API  
 **Application:** OSC SmartCheck AI (Majlis Perbandaran Langkawi Bandar Pelancongan - MPLBP)  
 
 ---
 
-## 1. Current Document AI Configuration Audit
+## 1. Pipeline Accuracy Testing Architecture
 
-| Configuration Parameter | Active Value / Default | Description |
-| :--- | :--- | :--- |
-| `DOCUMENT_AI_PROJECT_ID` | `osc-smartcheck-mplbp` | Google Cloud Project ID |
-| `DOCUMENT_AI_LOCATION` | `us` / `eu` | Document AI API Multi-Region |
-| `DOCUMENT_AI_PROCESSOR_ID` | Environment variable | Configured Processor ID |
-| **Processor Type** | **Form Parser / Generic OCR** | Standard key-value and layout text extraction processor. |
+To ensure strict engineering integrity and prevent misrepresenting offline test results as real AI accuracy, the test harness is separated into two distinct layers:
 
-To achieve maximum extraction accuracy ($\ge 98\%$) on Malaysian LCP cover sheets, layout plan title blocks, and statutory planning submission forms, a **Custom Document Extractor (CDE)** should be trained and deployed via the Google Cloud Console.
+### (a) Offline Smoke Test (`tests/unit/golden-dataset-offline-smoketest.test.mjs`)
+- **Purpose**: Validates local code execution paths, normalization functions, and regex fallback parsing without making network requests.
+- **Console Label**: `OFFLINE SMOKE TEST — NOT AN ACCURACY BENCHMARK`
+- **Known Limitations**: **Does NOT measure live Gemini AI model accuracy.** Historical 50.0% output in early commits was an offline harness self-test result, not an AI accuracy benchmark.
 
----
-
-## 2. Step-by-Step Custom Document Extractor (CDE) Training Protocol
-
-### Step 1: Create Custom Document Extractor in GCP Console
-1. Navigate to [Google Cloud Console -> Document AI -> Processors](https://console.cloud.google.com/ai/document-ai/processors).
-2. Click **Create Processor** and select **Custom Document Extractor (CDE)** under Custom Processors.
-3. Set Processor Name: `mplbp-lcp-custom-extractor`.
-4. Region: Select `us` (or preferred primary region).
-5. Click **Create**. Copy the generated **Processor ID** (e.g. `98234ab10c72e90f`).
+### (b) Live Gemini 1.5 Pro Accuracy Benchmark (`tests/unit/golden-dataset-live.test.mjs`)
+- **Purpose**: Evaluates actual Gemini 1.5 Pro inference accuracy against 3 representative golden planning fixtures (`fixture-hotel-chenang`, `fixture-housing-kuah`, `fixture-commercial-bandar`).
+- **Prerequisites**: Requires `GEMINI_API_KEY` environment variable.
+- **Skip Behavior**: If `GEMINI_API_KEY` is not present, the test explicitly skips with console notice:
+  `SKIPPED: GEMINI_API_KEY not set — live accuracy benchmark not run`
+- **Session Execution Status (2026-09-07)**: **SKIPPED** (No `GEMINI_API_KEY` configured in current local environment).
 
 ---
 
-### Step 2: Define Entity Schema
-In the Document AI Workbench **Schema** tab, configure the target planning entities:
+## 2. How to Run Live Model Accuracy Benchmark
 
-```text
-┌───────────────────────────┬──────────────┬────────────────────────────────────────────────────────┐
-│ Entity Name               │ Value Type   │ Description / Example                                  │
-├───────────────────────────┼──────────────┼────────────────────────────────────────────────────────┤
-│ projectTitle              │ string       │ Tajuk Cadangan Pembangunan                             │
-│ applicantName             │ string       │ Nama Pemaju / Pemohon                                  │
-│ consultantName            │ string       │ Jururancang Bandar / PSP                               │
-│ lotNumber                 │ string       │ Nombor Lot Tanah (e.g. Lot 1042, Lot 1043)             │
-│ mukim                     │ string       │ Mukim (Kuah, Kedawang, Padang Matsirat, etc.)          │
-│ district                  │ string       │ Daerah (Langkawi)                                      │
-│ siteAreaSqm               │ number       │ Keluasan Tapak Pembangunan (m²)                        │
-│ proposedLandUse           │ string       │ Guna Tanah Dicadangkan (Hotel, Perumahan, Komersial)   │
-│ grossFloorAreaSqm         │ number       │ Jumlah Keluasan Lantai Kasar / GFA (m²)                │
-│ plotRatio                 │ number/string│ Nisbah Plot / Plot Ratio (e.g. 1:2.5)                  │
-│ plinthAreaPercent         │ number       │ Liputan Bangunan / Plinth Area (%)                     │
-│ numberOfFloors            │ number       │ Ketinggian Tingkat Bangunan                            │
-│ maximumBuildingHeightM    │ number       │ Ketinggian Maksimum Bangunan (meter)                   │
-│ carParkingProvided        │ number       │ Petak Tempat Letak Kereta                              │
-│ motorcycleParkingProvided │ number       │ Petak Tempat Letak Motosikal                           │
-│ disabledParkingProvided   │ number       │ Petak Tempat Letak Kereta OKU                          │
-│ openSpaceAreaSqm          │ number       │ Keluasan Kawasan Lapang (m²)                           │
-└───────────────────────────┴──────────────┴────────────────────────────────────────────────────────┘
-```
+To execute the live accuracy benchmark against Gemini 1.5 Pro:
+
+1. Obtain a valid Gemini API key from [Google AI Studio](https://aistudio.google.com/).
+2. Set `GEMINI_API_KEY` in your `.env.local` file or command line:
+   ```bash
+   # Windows PowerShell
+   $env:GEMINI_API_KEY="AIzaSy..."
+   node --test tests/unit/golden-dataset-live.test.mjs
+
+   # Linux / macOS / Bash
+   GEMINI_API_KEY="AIzaSy..." node --test tests/unit/golden-dataset-live.test.mjs
+   ```
+3. GitHub Actions CI/CD Integration:
+   - Configured in `.github/workflows/ci.yml` under `live-accuracy-benchmark` job.
+   - Triggered via GitHub Actions `workflow_dispatch` (Manual Trigger) using GitHub Secret `${{ secrets.GEMINI_API_KEY }}`.
 
 ---
 
-### Step 3: Label Sample Training Documents
-1. In the **Train** tab, upload at least **10 to 20 representative Malaysian LCP PDF documents** (cover sheets, parameter tables, and title blocks).
-2. Assign 80% of documents to the **Test Set** and 20% to the **Evaluation Set**.
-3. Using the Document AI Labeling Tool:
-   - Highlight text bounding boxes for each entity defined in Step 2.
-   - For parameter tables (Parking counts, Plinth Area, GFA), label table cells explicitly.
-4. Click **Save Labeling**.
+## 3. Custom Document Extractor (CDE) GCP Training Protocol
 
----
+To achieve maximum Document AI OCR accuracy on scanned Malaysian LCP cover sheets and layout plan title blocks:
 
-### Step 4: Train & Deploy Processor Version
-1. Click **Train New Version**. Set Version Name: `v1.0-lcp-prod`.
-2. Wait for training completion (~1 to 2 hours).
-3. Review F1-Score evaluation metrics. Verify precision $\ge 95\%$ on key parameters.
-4. Click **Set as Default Version** to activate `v1.0-lcp-prod`.
+### Step 1: Create Processor
+1. Go to [GCP Console -> Document AI -> Processors](https://console.cloud.google.com/ai/document-ai/processors).
+2. Create a **Custom Document Extractor (CDE)** named `mplbp-lcp-custom-extractor`.
+3. Set region `us` and copy Processor ID.
 
----
+### Step 2: Define Schema Entities
+Configure schema fields: `projectTitle`, `applicantName`, `consultantName`, `lotNumber`, `mukim`, `district`, `siteAreaSqm`, `grossFloorAreaSqm`, `plotRatio`, `buildingCoveragePercent`, `numberOfFloors`, `maximumBuildingHeightM`, `carParkingProvided`, `motorcycleParkingProvided`, `disabledParkingProvided`, `openSpaceAreaSqm`.
 
-### Step 5: Environment Variable Configuration
-Copy the deployed Processor ID and update your `.env.local` file:
+### Step 3: Label & Train
+1. Upload 10-20 sample Malaysian LCP documents.
+2. Label bounding boxes and parameter table cells.
+3. Train new version `v1.0-lcp-prod` and set as default.
 
+### Step 4: Set Environment Variable
+Update `.env.local`:
 ```bash
-# Update .env.local with your new Custom Document Extractor ID
 DOCUMENT_AI_PROJECT_ID=osc-smartcheck-mplbp
 DOCUMENT_AI_LOCATION=us
-DOCUMENT_AI_PROCESSOR_ID=98234ab10c72e90f
+DOCUMENT_AI_PROCESSOR_ID=<your-processor-id>
 ```
-
-Restart the Next.js development server:
-```bash
-npm run dev
-```
-
----
-
-## 3. Accuracy Evaluation & Benchmark Guidelines
-
-To measure extraction accuracy without fabricating benchmark results:
-- Run `npm run test` or `node --test tests/unit/extraction-confidence-benchmark.test.mjs`.
-- The benchmark script measures empirical field-level extraction rate, evidence quote verification percentage, and confidence score distribution against active ground-truth test fixtures.
