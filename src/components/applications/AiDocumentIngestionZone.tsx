@@ -323,6 +323,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressStep, setProgressStep] = useState<number>(0);
   const [activeExtractedPreset, setActiveExtractedPreset] = useState<ExtractedPreset | null>(null);
+  const [qualityErrorMessage, setQualityErrorMessage] = useState<string | null>(null);
 
   const processingSteps = [
     "Mengimbas dokumen LCP (PDF) & membaca Title Block pelan...",
@@ -332,6 +333,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
   ];
 
   const handleRunAiExtraction = (preset?: ExtractedPreset) => {
+    setQualityErrorMessage(null);
     const targetPreset = preset || activeExtractedPreset || SAMPLE_PRESETS[0];
     setIsProcessing(true);
     setProgressStep(0);
@@ -357,9 +359,18 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
   };
 
   const handleCustomUpload = (type: "LCP" | "DWG", e: React.ChangeEvent<HTMLInputElement>) => {
+    setQualityErrorMessage(null);
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Pre-Upload PDF Quality Gate
     if (type === "LCP") {
+      if (file.size === 0 || file.size < 1024) {
+        setQualityErrorMessage(
+          "Fail PDF tidak sah atau kualiti imbuhan (OCR) terlalu rendah. Sila pastikan dokumen PDF bukan fail kosong, mengandungi teks/halaman yang boleh dibaca, dan resolusi imbasan sekurang-kurangnya 150 DPI sebelum memuat naik semula."
+        );
+        return;
+      }
       setLcpFile(file);
     } else {
       setDwgFile(file);
@@ -398,6 +409,13 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
             </span>
           </div>
         </div>
+
+        {qualityErrorMessage && (
+          <div className="rounded-sm border border-rose-500/50 bg-rose-950/80 p-3.5 text-xs text-rose-200 shadow-sm flex items-start gap-2.5">
+            <span className="font-bold text-rose-400 shrink-0">⚠️ AMARAN KUALITI DOKUMEN:</span>
+            <span>{qualityErrorMessage}</span>
+          </div>
+        )}
 
         {/* 2 Main File Upload Dropzones */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

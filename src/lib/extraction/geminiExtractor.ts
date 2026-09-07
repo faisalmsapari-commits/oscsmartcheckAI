@@ -537,6 +537,8 @@ export async function extractPlanningFactsFromDocument(
     []
   );
 
+  verifyEvidenceQuotes(facts, doc);
+
   const conflicts = detectFactConflicts(facts);
 
   return {
@@ -545,3 +547,73 @@ export async function extractPlanningFactsFromDocument(
     totalPages: doc.totalPages,
   };
 }
+
+/**
+ * Computes 3-gram character Sørensen-Dice similarity coefficient (0.0 to 1.0)
+ */
+export function computeTextSimilarity(strA: string, strB: string): number {
+  const normA = strA.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normB = strB.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  if (!normA || !normB) return 0;
+  if (normA === normB || normB.includes(normA) || normA.includes(normB)) return 1.0;
+
+  const getNgrams = (str: string, n = 3): Set<string> => {
+    const ngrams = new Set<string>();
+    for (let i = 0; i <= str.length - n; i++) {
+      ngrams.add(str.substring(i, i + n));
+    }
+    return ngrams;
+  };
+
+  const ngramsA = getNgrams(normA);
+  const ngramsB = getNgrams(normB);
+
+  if (ngramsA.size === 0 || ngramsB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const gram of ngramsA) {
+    if (ngramsB.has(gram)) intersection++;
+  }
+
+  return (2 * intersection) / (ngramsA.size + ngramsB.size);
+}
+
+/**
+ * Verifies quoted evidence text against actual NormalizedDocument text.
+ * Flags unverifiable/fabricated quotes with evidenceVerified: false and downgrades confidence to LOW.
+ */
+export function verifyEvidenceQuotes(facts: PlanningFact[], doc: NormalizedDocument): void {
+  const docFullText = doc.pages.map((p) => p.text).join("\n");
+
+  for (const fact of facts) {
+    if (fact.status === "NOT_FOUND" || fact.sourceEvidence.length === 0) {
+      fact.evidenceVerified = true;
+      continue;
+    }
+
+    let allEvidenceVerified = true;
+
+    for (const ev of fact.sourceEvidence) {
+      const page = doc.pages.find((p) => p.pageNumber === ev.pageNumber);
+      const targetText = page ? page.text : docFullText;
+      const sim = computeTextSimilarity(ev.quotedText, targetText);
+
+      // 80% similarity threshold to allow minor OCR whitespace/character variations while rejecting hallucinations
+      if (sim >= 0.8) {
+        ev.evidenceVerified = true;
+      } else {
+        ev.evidenceVerified = false;
+        allEvidenceVerified = false;
+      }
+    }
+
+    fact.evidenceVerified = allEvidenceVerified;
+
+    if (!allEvidenceVerified) {
+      fact.confidenceLevel = "LOW";
+      fact.confidence = Math.min(fact.confidence, 0.49);
+    }
+  }
+}
+

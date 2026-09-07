@@ -21,6 +21,7 @@ export const FactEvidenceSchema = z.object({
   pageNumber: z.number().int().positive(),
   quotedText: z.string().min(1),
   tableReference: z.string().nullable().default(null),
+  evidenceVerified: z.boolean().default(true).optional(),
 });
 
 export const PlanningFactSchema = z.object({
@@ -49,6 +50,7 @@ export const PlanningFactSchema = z.object({
   confidence: z.number().min(0).max(1),
   confidenceLevel: z.enum(["HIGH", "MEDIUM", "LOW"]),
   sourceEvidence: z.array(FactEvidenceSchema).default([]),
+  evidenceVerified: z.boolean().default(true).optional(),
   aiGenerated: z.boolean().default(true),
   confirmedValue: z.unknown().nullable().default(null),
   confirmedBy: z.string().nullable().default(null),

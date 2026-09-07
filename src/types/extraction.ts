@@ -49,6 +49,7 @@ export interface FactEvidence {
   pageNumber: number;
   quotedText: string;
   tableReference: string | null;
+  evidenceVerified?: boolean;
 }
 
 export interface FactConflictCandidate {
@@ -82,6 +83,7 @@ export interface PlanningFact<T = unknown> {
   confidence: number;
   confidenceLevel: ConfidenceLevel;
   sourceEvidence: FactEvidence[];
+  evidenceVerified?: boolean;
   aiGenerated: boolean;
   confirmedValue: T | null;
   confirmedBy: string | null;

@@ -18,6 +18,23 @@ interface DocAiTextSegment {
   endIndex?: number | string;
 }
 
+interface DocAiTableCell {
+  layout?: {
+    textAnchor?: {
+      textSegments?: DocAiTextSegment[];
+    };
+  };
+}
+
+interface DocAiTableRow {
+  cells?: DocAiTableCell[];
+}
+
+interface DocAiTable {
+  headerRows?: DocAiTableRow[];
+  bodyRows?: DocAiTableRow[];
+}
+
 interface DocAiParagraph {
   layout?: {
     textAnchor?: {
@@ -28,6 +45,7 @@ interface DocAiParagraph {
 
 interface DocAiPage {
   paragraphs?: DocAiParagraph[];
+  tables?: DocAiTable[];
 }
 
 interface DocAiDocument {
@@ -205,29 +223,69 @@ export class GoogleDocumentAIProcessor implements DocumentProcessor {
       }
 
       const fullText = String(document.text);
+      const extractSegmentsText = (segments?: DocAiTextSegment[]): string => {
+        if (!segments) return "";
+        return segments
+          .map((seg) => {
+            const start = Number(seg.startIndex || 0);
+            const end = Number(seg.endIndex || 0);
+            return fullText.substring(start, end);
+          })
+          .join("")
+          .trim();
+      };
+
       const pages: NormalizedPage[] = (document.pages || []).map((page: DocAiPage, idx: number) => {
         const pageNumber = idx + 1;
         let pageText = "";
 
         if (page.paragraphs) {
           pageText = page.paragraphs
-            .map((p: DocAiParagraph) => {
-              const textAnchor = p.layout?.textAnchor;
-              if (!textAnchor || !textAnchor.textSegments) return "";
-              return textAnchor.textSegments
-                .map((seg: DocAiTextSegment) => {
-                  const start = Number(seg.startIndex || 0);
-                  const end = Number(seg.endIndex || 0);
-                  return fullText.substring(start, end);
-                })
-                .join("");
-            })
+            .map((p: DocAiParagraph) => extractSegmentsText(p.layout?.textAnchor?.textSegments))
+            .filter(Boolean)
             .join("\n");
+        }
+
+        const parsedTables: Array<{
+          rowCount: number;
+          columnCount: number;
+          headerRows: string[][];
+          bodyRows: string[][];
+        }> = [];
+
+        if (page.tables) {
+          for (const table of page.tables) {
+            const headerRows: string[][] = (table.headerRows || []).map((row) =>
+              (row.cells || []).map((cell) => extractSegmentsText(cell.layout?.textAnchor?.textSegments))
+            );
+            const bodyRows: string[][] = (table.bodyRows || []).map((row) =>
+              (row.cells || []).map((cell) => extractSegmentsText(cell.layout?.textAnchor?.textSegments))
+            );
+
+            const rowCount = headerRows.length + bodyRows.length;
+            const columnCount = Math.max(
+              ...[...headerRows, ...bodyRows].map((r) => r.length),
+              0
+            );
+
+            if (rowCount > 0 && columnCount > 0) {
+              parsedTables.push({ rowCount, columnCount, headerRows, bodyRows });
+
+              const mdLines: string[] = [];
+              if (headerRows.length > 0) {
+                headerRows.forEach((h) => mdLines.push(`| ${h.join(" | ")} |`));
+                mdLines.push(`| ${new Array(columnCount).fill("---").join(" | ")} |`);
+              }
+              bodyRows.forEach((b) => mdLines.push(`| ${b.join(" | ")} |`));
+              pageText += `\n\n[JADUAL JALUR / PARAMETER PERANCANGAN]:\n` + mdLines.join("\n");
+            }
+          }
         }
 
         return {
           pageNumber,
           text: pageText || `[Page ${pageNumber}]`,
+          tables: parsedTables.length > 0 ? parsedTables : undefined,
         };
       });
 

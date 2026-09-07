@@ -146,8 +146,31 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Pre-Upload PDF Quality Gate Validation
+    if (file.size === 0 || file.size < 1024) {
+      return NextResponse.json(
+        {
+          code: "INVALID_PDF_QUALITY",
+          error: "Fail PDF tidak sah atau kualiti imbuhan (OCR) terlalu rendah. Sila pastikan dokumen PDF bukan fail kosong, mengandungi teks/halaman yang boleh dibaca, dan resolusi imbasan sekurang-kurangnya 150 DPI sebelum memuat naik semula.",
+        },
+        { status: 400 }
+      );
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
+
+    // PDF Magic Bytes Header Validation (%PDF-)
+    const pdfMagicHeader = fileBuffer.slice(0, 5).toString("ascii");
+    if (!pdfMagicHeader.startsWith("%PDF-")) {
+      return NextResponse.json(
+        {
+          code: "CORRUPT_PDF_HEADER",
+          error: "Header fail PDF rosak atau tidak sah. Sila pastikan fail disimpan sebagai dokumen PDF standard sebelum memuat naik semula.",
+        },
+        { status: 400 }
+      );
+    }
 
     const docRecord = await uploadDocument(
       {
