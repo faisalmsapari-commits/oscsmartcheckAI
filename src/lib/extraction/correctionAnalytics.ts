@@ -20,6 +20,7 @@ export interface SampleCorrectionPair {
 }
 
 export interface CorrectionAnalyticsResult {
+  isDemoData: boolean;
   totalFactsCount: number;
   totalCorrectionsCount: number;
   overallCorrectionRate: number; // Percentage, e.g., 9.17 for 9.17%
@@ -95,6 +96,7 @@ export function getDemoCorrectionAnalytics(): CorrectionAnalyticsResult {
   ];
 
   return {
+    isDemoData: true,
     totalFactsCount: 120,
     totalCorrectionsCount: 11,
     overallCorrectionRate: 9.17,
@@ -183,6 +185,7 @@ export async function getFactCorrectionAnalytics(customDb?: Firestore): Promise<
       : 0;
 
     return {
+      isDemoData: false,
       totalFactsCount,
       totalCorrectionsCount,
       overallCorrectionRate,

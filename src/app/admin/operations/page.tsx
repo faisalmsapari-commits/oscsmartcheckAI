@@ -172,22 +172,38 @@ export default function AdminOperationsPage() {
                   Sambungan Aktif: {healthData?.services?.gisPostgres?.connectionsActive || 4} • Dataset RTD 2030 sedia.
                 </p>
               </Card>
-
-              <Card headerTitle="Enjin Laporan PDF Rasmi" className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-gov-800" />
-                    <span className="text-xs font-bold text-slate-800">Server PDF Engine</span>
-                  </div>
-                  <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                    ONLINE
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Purata Masa Jana: {healthData?.services?.pdfRenderer?.avgRenderTimeMs || 120}ms • SHA-256 Validated.
-                </p>
-              </Card>
             </div>
+
+            {/* AI Fact Correction Analytics */}
+            <Card headerTitle="Analitik Pembetulan Fakta AI Pegawai (Extraction Correction Report)" className="p-5 space-y-4">
+              <div className="rounded-sm border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold">
+                  <span>⚠️ DATA DEMO — bukan data produksi sebenar</span>
+                </div>
+                <span className="text-[11px] font-medium text-amber-800">
+                  (Data sintetik fixture dipaparkan sehingga pegawai membuat pembetulan fakta pertama dalam Firestore)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div className="rounded-sm border border-slate-200 bg-slate-50 p-3 text-center space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Jumlah Fakta Diekstrak</span>
+                  <p className="text-xl font-extrabold text-gov-900">120</p>
+                </div>
+                <div className="rounded-sm border border-slate-200 bg-slate-50 p-3 text-center space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Fakta Dibetulkan Pegawai</span>
+                  <p className="text-xl font-extrabold text-amber-700">11</p>
+                </div>
+                <div className="rounded-sm border border-slate-200 bg-slate-50 p-3 text-center space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Kadar Pembetulan Keseluruhan</span>
+                  <p className="text-xl font-extrabold text-gov-800">9.17%</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </AppShell>
+    </ProtectedRoute>
           </div>
         </div>
       </AppShell>
