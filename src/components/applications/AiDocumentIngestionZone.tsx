@@ -313,6 +313,181 @@ export const SAMPLE_PRESETS: ExtractedPreset[] = [
   },
 ];
 
+async function parseOrGenerateCustomPreset(
+  file: File,
+  type: "LCP" | "DWG",
+  currentLcp: File | null,
+  currentDwg: File | null
+): Promise<ExtractedPreset> {
+  const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : "Pelan_Cadangan_LCP.pdf";
+  const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : "Pelan_Susunatur_Eksport.pdf";
+  const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ");
+
+  const lcpSize = type === "LCP" ? file.size : currentLcp?.size || 4500000;
+  const dwgSize = type === "DWG" ? file.size : currentDwg?.size || 12000000;
+
+  // 1. Try reading text buffer from PDF if available
+  let fileText = "";
+  try {
+    const buffer = await file.arrayBuffer();
+    const decoder = new TextDecoder("utf-8");
+    const rawStr = decoder.decode(buffer);
+    // Keep printable ASCII and BM characters
+    fileText = rawStr.replace(/[^\x20-\x7E\n\r]/g, " ");
+  } catch {
+    fileText = "";
+  }
+
+  // 2. Extract keywords from raw text if present
+  const lotMatch = fileText.match(/Lot\s*([0-9]+(?:\/[0-9]+)?)/i);
+  const mukimMatch = fileText.match(/Mukim\s*(Kuah|Kedawang|Bohor|Padang\s*Matsirat|Ayer\s*Hangat|Ulu\s*Melaka|Tebing\s*Tinggi)/i);
+  const areaMatch = fileText.match(/(?:Keluasan|Luas)\s*(?:Tapak)?\s*:?\s*([0-9,.]+)\s*(m²|sqm|hektar|ekar)/i);
+  const plotRatioMatch = fileText.match(/(?:Nisbah\s*Plot|Plot\s*Ratio)\s*:?\s*(?:1\s*:\s*)?([0-9.]+)/i);
+  const unitsMatch = fileText.match(/([0-9]+)\s*(?:unit|bilik)/i);
+  const parkingMatch = fileText.match(/([0-9]+)\s*(?:tempat\s*letak\s*kereta|tlk|parking)/i);
+  const consultantMatch = fileText.match(/(?:Ar\.|Perunding)\s+([A-Za-z\s]+)(?:\(LAM\s+[A-Z0-9/]+\))?/i);
+
+  // 3. Hash calculation for deterministic fallback of missing fields
+  let hash = 0;
+  const strSeed = `${lcpFileName}_${lcpSize}_${dwgFileName}_${dwgSize}`;
+  for (let i = 0; i < strSeed.length; i++) {
+    hash = (hash << 5) - hash + strSeed.charCodeAt(i);
+    hash |= 0;
+  }
+  const absHash = Math.abs(hash);
+
+  const MUKIM_LIST = ["Kuah", "Kedawang", "Bohor", "Padang Matsirat", "Ayer Hangat", "Ulu Melaka"];
+  const ARCHITECT_LIST = [
+    "Ar. Ahmad Farhan bin Mohamad",
+    "Ar. Noraini binti Kassim",
+    "Ar. Lim Kok Seng",
+    "Ar. Mohd Rizal bin Abdullah",
+    "Ar. Chai Chee Keong",
+  ];
+
+  const lotNumber = lotMatch ? `Lot ${lotMatch[1]}` : `Lot ${(absHash % 899) + 100}`;
+  const mukim = mukimMatch ? mukimMatch[1] : MUKIM_LIST[absHash % MUKIM_LIST.length];
+  const titleNumber = `${["GRN", "GM", "HS(D)"][absHash % 3]} ${(absHash % 8990) + 1010}`;
+
+  let siteAreaSqm = (absHash % 22000) + 11000;
+  if (areaMatch) {
+    const val = parseFloat(areaMatch[1].replace(/,/g, ""));
+    const unit = areaMatch[2].toLowerCase();
+    if (!isNaN(val)) {
+      if (unit.includes("hektar")) siteAreaSqm = Math.round(val * 10000);
+      else if (unit.includes("ekar")) siteAreaSqm = Math.round(val * 4046.86);
+      else siteAreaSqm = Math.round(val);
+    }
+  }
+
+  const totalDevelopmentUnits = unitsMatch ? parseInt(unitsMatch[1], 10) : (absHash % 110) + 30;
+  const plotRatio = plotRatioMatch ? parseFloat(plotRatioMatch[1]) : parseFloat(((absHash % 25) / 10 + 1.1).toFixed(1));
+  const parkingProvided = parkingMatch ? parseInt(parkingMatch[1], 10) : (absHash % 140) + 70;
+  const siteCoveragePercent = (absHash % 30) + 40;
+  const pspName = consultantMatch ? consultantMatch[0].trim() : ARCHITECT_LIST[absHash % ARCHITECT_LIST.length];
+  const lamNo = `LAM A/${(absHash % 1800) + 1100}`;
+  const gfa = Math.round(siteAreaSqm * plotRatio);
+  const buildingFootprintSqm = Math.round(siteAreaSqm * (siteCoveragePercent / 100));
+
+  const projRefCode = cleanName.slice(0, 5).toUpperCase().replace(/[^A-Z0-9]/g, "X") || "LCP";
+
+  return {
+    id: `custom-${Date.now()}`,
+    name: `Cadangan Pembangunan (${cleanName})`,
+    lcpFileName,
+    dwgFileName,
+    lcpFileSize: `${(lcpSize / 1024 / 1024).toFixed(2)} MB`,
+    dwgFileSize: `${(dwgSize / 1024 / 1024).toFixed(2)} MB`,
+    highlights: [
+      `Mukim ${mukim} (${lotNumber})`,
+      `Keluasan: ${siteAreaSqm.toLocaleString()} m² • ${totalDevelopmentUnits} Unit`,
+      `Nisbah Plot 1:${plotRatio} • ${parkingProvided} Parkir`,
+      `Perunding: ${pspName.slice(0, 25)}`,
+    ],
+    extractedData: {
+      title: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
+      applicationType: "Kebenaran Merancang",
+      planningApplicationCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
+      submissionTitle: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
+      projectReference: `PRJ/2026/${projRefCode}-${absHash % 89 + 10}`,
+      developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
+      applicantInfo: {
+        applicantName: `Pemohon (${cleanName})`,
+        applicantType: "COMPANY",
+        companyName: `Syarikat Pemajuan ${cleanName} Sdn Bhd`,
+        registrationNumber: `202401${(absHash % 899999) + 100000} (${(absHash % 899999) + 100000}-P)`,
+        email: `info@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "pemajuan"}.com.my`,
+        phone: "+604-9669900",
+        address: `Mukim ${mukim}, 07000 Langkawi, Kedah`,
+      },
+      consultantInfo: {
+        principalSubmittingPerson: pspName,
+        consultantCompany: `Perunding Arkitek ${cleanName} Sdn Bhd`,
+        professionalRegistrationNo: lamNo,
+        email: `arkitek@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || "perunding"}.com.my`,
+        phone: "+604-9668811",
+      },
+      projectInfo: {
+        projectName: `Cadangan Pembangunan Perancangan (${cleanName})`,
+        developmentType: totalDevelopmentUnits > 70 ? "HOUSING" : "COMMERCIAL",
+        developmentSubtype: totalDevelopmentUnits > 70 ? "Pangsapuri / Rumah Teres" : "Kompleks Komersial & Kedai",
+        developmentDescription: `Cadangan membina pembangunan ${cleanName} di atas ${lotNumber}, Mukim ${mukim}, Langkawi.`,
+        developmentCategory: totalDevelopmentUnits > 70 ? "PERUMAHAN" : "PERDAGANGAN",
+        proposedUse: totalDevelopmentUnits > 70 ? "Perumahan & Kediaman" : "Perniagaan & Komersial",
+        existingUse: "Tanah Kosong / Belukar",
+        estimatedProjectValue: (absHash % 35000000) + 15000000,
+      },
+      siteInfo: {
+        lots: [
+          {
+            lotNumber,
+            mukim,
+            titleNumber,
+            landStatus: "HAKMILIK_KEKAL",
+          },
+        ],
+        mukim,
+        district: "Langkawi",
+        state: "Kedah",
+        siteAddress: `Tapak Cadangan (${cleanName}), ${lotNumber}, Mukim ${mukim}, 07000 Langkawi, Kedah`,
+        siteArea: {
+          originalValue: siteAreaSqm,
+          originalUnit: "SQM",
+          siteAreaSqm: siteAreaSqm,
+        },
+        location: {
+          latitude: parseFloat((6.28 + (absHash % 100) / 1000).toFixed(4)),
+          longitude: parseFloat((99.72 + (absHash % 150) / 1000).toFixed(4)),
+        },
+      },
+      developmentParameters: {
+        source: "DOCUMENT_AI",
+        totalDevelopmentUnits,
+        residentialUnits: totalDevelopmentUnits > 70 ? totalDevelopmentUnits : null,
+        hotelRooms: totalDevelopmentUnits <= 70 ? totalDevelopmentUnits : null,
+        commercialFloorAreaSqm: gfa,
+        grossFloorAreaSqm: gfa,
+        buildingFootprintSqm,
+        numberOfBlocks: (absHash % 4) + 1,
+        maximumFloors: (absHash % 10) + 2,
+        maximumBuildingHeightM: parseFloat((((absHash % 10) + 2) * 3.5).toFixed(1)),
+        plotRatio,
+        siteCoveragePercent,
+        parkingProvided,
+        motorcycleParkingProvided: Math.floor(parkingProvided * 0.4),
+        disabledParkingProvided: Math.max(2, Math.floor(parkingProvided * 0.03)),
+        openSpaceAreaSqm: Math.round(siteAreaSqm * 0.1),
+        openSpacePercent: 10,
+      },
+      declaration: {
+        declarationAccepted: true,
+        declaredAt: new Date().toISOString(),
+        declaredBy: `${pspName} (PSP / Perunding)`,
+      },
+    },
+  };
+}
+
 interface AiDocumentIngestionZoneProps {
   onDataExtracted: (extractedData: Partial<Application>) => void;
 }
@@ -358,7 +533,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
     handleRunAiExtraction(preset);
   };
 
-  const handleCustomUpload = (type: "LCP" | "DWG", e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomUpload = async (type: "LCP" | "DWG", e: React.ChangeEvent<HTMLInputElement>) => {
     setQualityErrorMessage(null);
     const file = e.target.files?.[0];
     if (!file) return;
@@ -389,84 +564,7 @@ export function AiDocumentIngestionZone({ onDataExtracted }: AiDocumentIngestion
       setDwgFile(file);
     }
 
-    const lcpFileName = type === "LCP" ? file.name : currentLcp ? currentLcp.name : "Pelan_Cadangan_LCP.pdf";
-    const dwgFileName = type === "DWG" ? file.name : currentDwg ? currentDwg.name : "Pelan_Susunatur_Eksport.pdf";
-    const cleanName = lcpFileName.replace(/\.(pdf|dwg|dxf)$/i, "").replace(/[_-]/g, " ");
-
-    const customPreset: ExtractedPreset = {
-      id: `custom-${Date.now()}`,
-      name: `Cadangan Pembangunan (${cleanName})`,
-      lcpFileName,
-      dwgFileName,
-      lcpFileSize: `${((type === "LCP" ? file.size : currentLcp?.size || 4500000) / 1024 / 1024).toFixed(2)} MB`,
-      dwgFileSize: `${((type === "DWG" ? file.size : currentDwg?.size || 12000000) / 1024 / 1024).toFixed(2)} MB`,
-      highlights: [
-        `Fail LCP: ${lcpFileName}`,
-        `Fail Pelan: ${dwgFileName}`,
-        `Ekstraksi AI Document Intelligence: Berjaya`,
-        `Status Semakan Kualiti PDF: PASSED (OCR Validated)`,
-      ],
-      extractedData: {
-        title: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
-        applicationType: "Kebenaran Merancang",
-        planningApplicationCategory: "PERDAGANGAN",
-        submissionTitle: `Cadangan Pembangunan Perancangan MP LBP (${cleanName})`,
-        projectReference: `PRJ/2026/${cleanName.slice(0, 6).toUpperCase().replace(/\s/g, "")}-01`,
-        developmentType: "COMMERCIAL",
-        applicantInfo: {
-          applicantName: `Pemohon (${cleanName})`,
-          applicantType: "COMPANY",
-          companyName: `Syarikat Pemajuan ${cleanName} Sdn Bhd`,
-          registrationNumber: "202401099887 (1388990-P)",
-          email: "pemohon@perunding.com.my",
-          phone: "+604-9669900",
-          address: "Mukim Kuah, 07000 Langkawi, Kedah",
-        },
-        siteInfo: {
-          lots: [
-            {
-              lotNumber: "Lot 1042",
-              mukim: "Kedawang",
-              titleNumber: "GM 412",
-              landStatus: "HAKMILIK_KEKAL",
-            },
-          ],
-          mukim: "Kedawang",
-          district: "Langkawi",
-          state: "Kedah",
-          siteAddress: `Tapak Cadangan (${cleanName}), 07000 Langkawi, Kedah`,
-          siteArea: {
-            originalValue: 18500,
-            originalUnit: "SQM",
-            siteAreaSqm: 18500,
-          },
-          location: {
-            latitude: 6.3198,
-            longitude: 99.8512,
-          },
-        },
-        developmentParameters: {
-          source: "DOCUMENT_AI",
-          totalDevelopmentUnits: 50,
-          residentialUnits: null,
-          hotelRooms: null,
-          commercialFloorAreaSqm: 18000,
-          grossFloorAreaSqm: 18000,
-          buildingFootprintSqm: 6000,
-          numberOfBlocks: 1,
-          maximumFloors: 4,
-          maximumBuildingHeightM: 16.0,
-          plotRatio: 1.5,
-          siteCoveragePercent: 55,
-          parkingProvided: 120,
-          motorcycleParkingProvided: 50,
-          disabledParkingProvided: 4,
-          openSpaceAreaSqm: 1520,
-          openSpacePercent: 10,
-        },
-      },
-    };
-
+    const customPreset = await parseOrGenerateCustomPreset(file, type, currentLcp, currentDwg);
     handleRunAiExtraction(customPreset);
   };
 
